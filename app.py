@@ -597,16 +597,20 @@ def generate_response():
         
         prompt += "<|assistant|>\n"
         
-        response = hf_client.text_generation(
-            prompt,
-            max_new_tokens=st.session_state.model_config["max_tokens"],
-            temperature=st.session_state.model_config["temperature"],
-            top_p=st.session_state.model_config["top_p"],
-        )
+        response = hf_client.chat.completions.create(
+        messages=[
+            {"role": "system", "content": system_prompt},
+            *st.session_state.messages,
+        ],
+        max_tokens=st.session_state.model_config["max_tokens"],
+        temperature=st.session_state.model_config["temperature"],
+        top_p=st.session_state.model_config["top_p"],
+    )
+
         
         # Simulate streaming (UI stays identical)
-        full_response = ""
-        for token in response.split():
+        assistant_text = response.choices[0].message.content
+        for token in assistant_text.split():
             full_response += token + " "
             cursor = "▌" if not st.session_state.show_thinking else ""
             response_placeholder.markdown(full_response + cursor)
@@ -682,3 +686,4 @@ with row_r:
             st.session_state.regenerate = True
 
             st.rerun()
+
