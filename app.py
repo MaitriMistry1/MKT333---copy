@@ -610,6 +610,8 @@ def generate_response():
         
         # Simulate streaming (UI stays identical)
         assistant_text = response.choices[0].message.content
+        if not assistant_text.strip():
+            assistant_text = "I don’t have enough information in the documents to answer that question."
         for token in assistant_text.split():
             full_response += token + " "
             cursor = "▌" if not st.session_state.show_thinking else ""
@@ -686,4 +688,5 @@ with row_r:
             st.session_state.regenerate = True
 
             st.rerun()
+
 
