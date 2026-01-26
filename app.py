@@ -1,5 +1,4 @@
 import streamlit as st
-import ollama
 import re
 import os
 import fitz  # PyMuPDF
@@ -8,7 +7,7 @@ import numpy as np
 import json
 
 from typing import Optional  # ✅ ADD THIS
-
+from huggingface_hub import InferenceClient
 from sentence_transformers import SentenceTransformer
 from huggingface_hub import login, HfApi 
 # -----------------------------
@@ -63,6 +62,15 @@ def hf_token_ok(token: str) -> bool:
         return True
     except Exception:
         return False 
+
+if not HF_TOKEN or not hf_token_ok(HF_TOKEN):
+    st.error("Hugging Face token missing or invalid.")
+    st.stop()
+
+hf_client = InferenceClient(
+    model="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",  # closest HF equivalent
+    token=HF_TOKEN,
+)
 
 ###########################################
 # PDF Extraction and RAG Functions with Caching
@@ -577,20 +585,32 @@ def generate_response():
             )
 
         full_response = ""
-        for chunk in ollama.chat(
-            model="deepseek-r1:1.5b",
-            messages=augmented_messages,
-            stream=True,
-            options={
-                "temperature": st.session_state.model_config["temperature"],
-                "top_p": st.session_state.model_config["top_p"],
-                "num_predict": st.session_state.model_config["max_tokens"],
-                "repeat_penalty": st.session_state.model_config["repeat_penalty"],
-            },
-        ):
-            full_response += chunk["message"]["content"]
+        # Convert messages → prompt (HF expects a single string)
+        prompt = ""
+        for msg in augmented_messages:
+            if msg["role"] == "system":
+                prompt += f"<|system|>\n{msg['content']}\n"
+            elif msg["role"] == "user":
+                prompt += f"<|user|>\n{msg['content']}\n"
+            else:
+                prompt += f"<|assistant|>\n{msg['content']}\n"
+        
+        prompt += "<|assistant|>\n"
+        
+        response = hf_client.text_generation(
+            prompt,
+            max_new_tokens=st.session_state.model_config["max_tokens"],
+            temperature=st.session_state.model_config["temperature"],
+            top_p=st.session_state.model_config["top_p"],
+        )
+        
+        # Simulate streaming (UI stays identical)
+        full_response = ""
+        for token in response.split():
+            full_response += token + " "
             cursor = "▌" if not st.session_state.show_thinking else ""
             response_placeholder.markdown(full_response + cursor)
+        
 
         parsed = parse_response(full_response)
         message = {"role": "assistant", "content": parsed["content"], "reasoning": parsed["reasoning"]}
@@ -660,4 +680,5 @@ with row_r:
         if st.session_state.messages and st.session_state.messages[-1]["role"] == "assistant":
             st.session_state.messages.pop()
             st.session_state.regenerate = True
+
             st.rerun()
