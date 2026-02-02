@@ -597,21 +597,32 @@ def generate_response():
         
         prompt += "<|assistant|>\n"
         
-        response = hf_client.chat.completions.create(
-        messages=[
-            {"role": "system", "content": system_prompt},
-            *st.session_state.messages,
-        ],
-        max_tokens=st.session_state.model_config["max_tokens"],
-        temperature=st.session_state.model_config["temperature"],
-        top_p=st.session_state.model_config["top_p"],
-    )
+        try:
+            response = hf_client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    *st.session_state.messages,
+                ],
+                max_tokens=st.session_state.model_config["max_tokens"],
+                temperature=st.session_state.model_config["temperature"],
+                top_p=st.session_state.model_config["top_p"],
+            )
+        
+            assistant_text = response.choices[0].message.content or ""
+        
+        except Exception as e:
+            assistant_text = (
+                "I’m having trouble reaching the model right now. "
+                "Please try again in a moment."
+            )
+
 
         
         # Simulate streaming (UI stays identical)
         assistant_text = response.choices[0].message.content
         if not assistant_text.strip():
             assistant_text = "I don’t have enough information in the documents to answer that question."
+        full_response = ""
         for token in assistant_text.split():
             full_response += token + " "
             cursor = "▌" if not st.session_state.show_thinking else ""
@@ -688,5 +699,6 @@ with row_r:
             st.session_state.regenerate = True
 
             st.rerun()
+
 
 
