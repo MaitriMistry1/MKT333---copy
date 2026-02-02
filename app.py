@@ -552,24 +552,26 @@ def display_response(parsed, placeholder):
 def generate_response():
     """Generate and display AI response with RAG context."""
     user_prompt = st.session_state.messages[-1]["content"]
+
     retrieved_context = ""
     if st.session_state.vector_index is not None and st.session_state.chunks is not None:
-        retrieved_context = retrieve_context(user_prompt, st.session_state.vector_index, st.session_state.chunks)
+        retrieved_context = retrieve_context(
+            user_prompt,
+            st.session_state.vector_index,
+            st.session_state.chunks,
+        )
 
     system_prompt = f"""
-         Use the following retrieved context to answer the query accurately:
-         {retrieved_context}
+    Use the following retrieved context to answer the query accurately:
+    {retrieved_context}
 
-         Try to always cite information from the documents. If unsure, say 'I don’t have enough information to answer this.'
-         """
-
-    augmented_messages = []
-    if system_prompt:
-        augmented_messages.append({"role": "system", "content": system_prompt})
-    augmented_messages.extend(st.session_state.messages)
+    Try to always cite information from the documents. If unsure, say
+    'I don’t have enough information to answer this.'
+    """
 
     with st.chat_message("assistant", avatar=ai_avatar):
         response_placeholder = st.empty()
+
         if st.session_state.show_thinking:
             response_placeholder.markdown(
                 """
@@ -584,55 +586,50 @@ def generate_response():
                 unsafe_allow_html=True,
             )
 
-        full_response = ""
-        # Convert messages → prompt (HF expects a single string)
-        prompt = ""
-        for msg in augmented_messages:
-            if msg["role"] == "system":
-                prompt += f"<|system|>\n{msg['content']}\n"
-            elif msg["role"] == "user":
-                prompt += f"<|user|>\n{msg['content']}\n"
-            else:
-                prompt += f"<|assistant|>\n{msg['content']}\n"
-        
-        prompt += "<|assistant|>\n"
-        
+        # --- HF chat completion (SAFE) ---
         try:
             response = hf_client.chat.completions.create(
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    *st.session_state.messages,
+                    *st.session_state.messages[-6:],  # trim history for stability
                 ],
                 max_tokens=st.session_state.model_config["max_tokens"],
                 temperature=st.session_state.model_config["temperature"],
                 top_p=st.session_state.model_config["top_p"],
             )
-        
+
             assistant_text = response.choices[0].message.content or ""
-        
+
+            if not assistant_text.strip():
+                assistant_text = (
+                    "I don’t have enough information in the documents "
+                    "to answer that question."
+                )
+
         except Exception:
             assistant_text = (
                 "I’m having trouble reaching the model right now. "
                 "Please try again in a moment."
             )
 
-
-        
-        # Simulate streaming (UI stays identical)
-        assistant_text = response.choices[0].message.content
-        if not assistant_text.strip():
-            assistant_text = "I don’t have enough information in the documents to answer that question."
+        # --- Simulated streaming (UI) ---
         full_response = ""
         for token in assistant_text.split():
             full_response += token + " "
             cursor = "▌" if not st.session_state.show_thinking else ""
             response_placeholder.markdown(full_response + cursor)
-        
 
         parsed = parse_response(full_response)
-        message = {"role": "assistant", "content": parsed["content"], "reasoning": parsed["reasoning"]}
-        st.session_state.messages.append(message)
+        st.session_state.messages.append(
+            {
+                "role": "assistant",
+                "content": parsed["content"],
+                "reasoning": parsed["reasoning"],
+            }
+        )
+
         display_response(parsed, response_placeholder)
+
 
 def is_response_incomplete(response):
     """Check if response appears incomplete."""
@@ -699,6 +696,7 @@ with row_r:
             st.session_state.regenerate = True
 
             st.rerun()
+
 
 
 
