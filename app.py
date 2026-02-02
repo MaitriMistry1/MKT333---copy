@@ -610,7 +610,7 @@ def generate_response():
         
             assistant_text = response.choices[0].message.content or ""
         
-        except Exception as e:
+        except Exception:
             assistant_text = (
                 "I’m having trouble reaching the model right now. "
                 "Please try again in a moment."
@@ -699,6 +699,7 @@ with row_r:
             st.session_state.regenerate = True
 
             st.rerun()
+
 
 
 
