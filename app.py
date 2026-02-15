@@ -6,10 +6,9 @@ import faiss
 import numpy as np
 import json
 
-from typing import Optional  # ✅ ADD THIS
-from huggingface_hub import InferenceClient
+from typing import Optional
+from huggingface_hub import InferenceClient, HfApi
 from sentence_transformers import SentenceTransformer
-from huggingface_hub import login, HfApi
 
 # -----------------------------
 # Syllabus file helper (UI)
@@ -35,23 +34,19 @@ st.set_page_config(
     page_title="MKT 333 — Beer AI & Video Games",
     page_icon="🍺",
     layout="centered",
-    initial_sidebar_state="expanded",  # show side panel
+    initial_sidebar_state="expanded",
 )
 
 # -----------------------------
-# (Optional) Hugging Face auth (kept minimal)
-# NOTE: Put your token in env var HF_TOKEN or Streamlit secrets, NOT in code.
+# Hugging Face token
 # -----------------------------
 def get_hf_token() -> Optional[str]:
-    # Streamlit Cloud secrets first
     try:
         tok = st.secrets.get("HF_TOKEN", None)
         if tok:
             return str(tok).strip()
     except Exception:
         pass
-
-    # Local env vars next (PowerShell: $env:HF_TOKEN="...")
     tok = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACEHUB_API_TOKEN")
     return tok.strip() if tok else None
 
@@ -69,7 +64,7 @@ if not HF_TOKEN or not hf_token_ok(HF_TOKEN):
     st.stop()
 
 hf_client = InferenceClient(
-    model="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",  # closest HF equivalent
+    model="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
     token=HF_TOKEN,
 )
 
@@ -92,7 +87,6 @@ def load_all_pdfs(folder_path):
     json_path = os.path.join(folder_path, "pdf_data.json")
     current_files = [f for f in os.listdir(folder_path) if f.lower().endswith(".pdf")]
 
-    # Try to load cached data if exists
     if os.path.exists(json_path):
         try:
             with open(json_path, "r") as f:
@@ -116,9 +110,8 @@ def load_all_pdfs(folder_path):
 
             if not needs_refresh:
                 return [{"filename": entry["filename"], "text": entry["text"]} for entry in saved_data]
-
         except (json.JSONDecodeError, KeyError):
-            pass  # Invalid cache, regenerate
+            pass
 
     docs = []
     for filename in current_files:
@@ -138,7 +131,6 @@ def load_all_pdfs(folder_path):
     return [{"filename": doc["filename"], "text": doc["text"]} for doc in docs]
 
 def split_text(text, max_length=5000):
-    """Split text into chunks of specified maximum length."""
     sentences = text.split("\n")
     chunks = []
     current_chunk = ""
@@ -152,7 +144,6 @@ def split_text(text, max_length=5000):
         chunks.append(current_chunk.strip())
     return chunks
 
-# Initialize the SentenceTransformer model for embeddings
 @st.cache_resource
 def get_embedder():
     return SentenceTransformer("BAAI/bge-small-en-v1.5")
@@ -160,7 +151,6 @@ def get_embedder():
 model = get_embedder()
 
 def build_vector_store(docs):
-    """Build a FAISS vector store from document chunks."""
     all_chunks = []
     metadata = []
     for doc in docs:
@@ -173,9 +163,8 @@ def build_vector_store(docs):
     index.add(embeddings)
     return index, all_chunks, metadata
 
-# ✅ UPDATED: include filenames in retrieved context so the model can cite
 def retrieve_context(query, index, chunks, metadatas, top_k=5):
-    """Retrieve relevant context from the vector store, including source labels."""
+    """Retrieve relevant context from the vector store, including [Source: filename] labels."""
     query_embedding = model.encode([query], convert_to_numpy=True)
     distances, indices = index.search(query_embedding, top_k)
 
@@ -186,15 +175,13 @@ def retrieve_context(query, index, chunks, metadatas, top_k=5):
     return "\n\n---\n\n".join(retrieved_blocks)
 
 ###########################################
-# Chatbot Interface and Styling (UI ONLY)
+# UI Theme + Styling
 ###########################################
 
-# --- UI State (theme + navigation) ---
 if "ui_dark_mode" not in st.session_state:
     st.session_state.ui_dark_mode = False
 
 left, right = st.columns([0.97, 0.20], vertical_alignment="center")
-
 with left:
     st.markdown(
         """
@@ -206,116 +193,44 @@ with left:
         unsafe_allow_html=True,
     )
 
-# Theme variables (UI CSS)
 if st.session_state.ui_dark_mode:
     bg = "#0b0d12"
     panel = "rgba(15, 18, 28, 0.86)"
-    panel_solid = "#0f121c"
     text = "#e7eaf0"
     mut = "#a7b0c0"
     border = "rgba(231,234,240,0.12)"
-    accent = "#990000"       # USC cardinal
-    accent2 = "#ffcc00"      # USC gold
+    accent2 = "#ffcc00"
     user_bg = "rgba(30, 34, 46, 0.92)"
     ai_bg = "rgba(153, 0, 0, 0.22)"
     input_bg = "rgba(12, 14, 22, 0.85)"
 else:
     bg = "#fafafa"
     panel = "rgba(255,255,255,0.92)"
-    panel_solid = "#ffffff"
     text = "#0b1220"
     mut = "#4b5563"
     border = "rgba(11,18,32,0.10)"
-    accent = "#990000"
     accent2 = "#b38600"
     user_bg = "rgba(248,250,252,0.98)"
     ai_bg = "rgba(153, 0, 0, 0.10)"
     input_bg = "rgba(255,255,255,0.98)"
 
-# CSS (UI only)
 st.markdown(
     f"""
 <style>
-/* App base */
 .stApp {{
   background: {bg};
   color: {text};
 }}
-/* Sidebar tidy */
-section[data-testid="stSidebar"] {{
-  border-right: 1px solid var(--sb-border, rgba(231,234,240,0.12));
-}}
-
-/* Sidebar card (like your old screenshot) */
-.sidebar-card {{
-  background: rgba(15, 18, 28, 0.86);
-  border: 1px solid rgba(231,234,240,0.12);
-  border-radius: 18px;
-  padding: 16px;
-}}
-
-.sidebar-title {{
-  font-weight: 900;
-  font-size: 1.05rem;
-  margin: 0;
-}}
-
-.sidebar-sub {{
-  margin-top: 8px;
-  color: rgba(167,176,192,1);
-  font-size: 0.95rem;
-}}
-
-/* Quick badge */
-.sidebar-badge {{
-  display: inline-block;
-  margin-left: 10px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: rgba(255,204,0,0.12);
-  border: 1px solid rgba(255,204,0,0.22);
-  color: rgba(231,234,240,1);
-  font-size: 0.78rem;
-  font-weight: 800;
-}}
-
-/* Link buttons */
-.sidebar-links a {{
-  display: block;
-  text-decoration: none;
-  margin-top: 12px;
-  padding: 16px 14px;
-  border-radius: 14px;
-  border: 1px solid rgba(231,234,240,0.10);
-  background: rgba(12, 14, 22, 0.75);
-  color: rgba(231,234,240,1) !important;
-  font-weight: 700;
-}}
-
-.sidebar-links a:hover {{
-  border-color: rgba(255,204,0,0.35);
-  box-shadow: 0 0 0 2px rgba(255,204,0,0.08);
-}}
-
-/* Layout width + spacing */
 .block-container {{
-  padding-top: 1.10rem;
+  padding-top: 1.0rem;
   max-width: 980px;
 }}
-
-/* Banner */
 .top-banner {{
   background: {panel};
   border: 1px solid {border};
   border-radius: 18px;
   padding: 18px 18px;
   text-align: center;
-}}
-.course-line {{
-  font-size: 0.98rem;
-  color: {mut};
-  font-weight: 700;
-  letter-spacing: 0.2px;
 }}
 .hero-title {{
   margin-top: 8px;
@@ -328,31 +243,9 @@ section[data-testid="stSidebar"] {{
   font-size: 1.02rem;
   color: {mut};
 }}
-.tagline {{
-  margin-top: 12px;
-  font-size: 0.98rem;
-  color: {text};
-  opacity: 0.92;
-}}
-
-/* Download button -> pill look */
-.stDownloadButton > button {{
-  border-radius: 999px !important;
-  border: 1px solid {border} !important;
-  background: {panel} !important;
-  color: {text} !important;
-  font-weight: 800 !important;
-  padding: 10px 14px !important;
-}}
-.stDownloadButton > button:hover {{
-  border-color: rgba(153,0,0,0.45) !important;
-  box-shadow: 0 0 0 2px rgba(153,0,0,0.10) !important;
-}}
-
-/* Chat bubbles */
 .stChatMessage {{
   padding: 1.05rem 1.10rem;
-  border-radius: 18px;
+  border-radius: 22px;
   margin: 0.80rem 0;
   max-width: 88%;
   border: 1px solid {border};
@@ -366,22 +259,16 @@ section[data-testid="stSidebar"] {{
   background: {ai_bg};
   margin-right: auto;
 }}
-
-/* Force chat text color */
 [data-testid="stChatMessage"] * {{
   color: {text} !important;
 }}
-/* Keep reasoning muted */
 .reasoning, .reasoning * {{
   color: {mut} !important;
   font-style: italic;
 }}
-/* Links readable */
 [data-testid="stChatMessage"] a {{
   color: {accent2} !important;
 }}
-
-/* Bigger chat input */
 .stChatInput {{
   border-top: 1px solid {border};
   background: transparent;
@@ -399,9 +286,13 @@ section[data-testid="stSidebar"] {{
 .stChatInput textarea::placeholder {{
   color: {mut} !important;
 }}
-
-section[data-testid="stSidebar"] {{
-  border-right: 1px solid {border};
+/* Softer buttons */
+.stButton button {{
+  border-radius: 14px !important;
+}}
+/* Cleaner dividers */
+hr {{
+  opacity: 0.25;
 }}
 </style>
 """,
@@ -417,17 +308,16 @@ if "messages" not in st.session_state:
     st.session_state.model_config = {
         "temperature": 0.2,
         "top_p": 0.9,
-        "max_tokens": 912,
-        "repeat_penalty": 1.1,
+        "max_tokens": 912,        # kept internally; removed from UI
+        "repeat_penalty": 1.1,    # kept internally
     }
     st.session_state.show_thinking = True
     st.session_state.show_reasoning = True
 
-# ✅ NEW: mode toggle default
 if "mode" not in st.session_state:
     st.session_state.mode = "Marketing"
 
-# Load saved settings
+# Load saved settings (keeps existing behavior; max_tokens stays internal)
 if os.path.exists("settings.json"):
     with open("settings.json", "r") as f:
         saved_settings = json.load(f)
@@ -455,67 +345,58 @@ if "vector_index" not in st.session_state:
         st.session_state.metadatas = None
 
 ###########################################
-# Sidebar Controls + USC Links (UI-only add)
+# Sidebar (Gen Z subtle, no tokens, no navigation section)
 ###########################################
 
 with st.sidebar:
-    st.markdown(
-        """
-        <div class="sidebar-card">
-          <div class="sidebar-title">USC Links <span class="sidebar-badge">Quick</span></div>
-          <div class="sidebar-sub">Open official pages in a new tab.</div>
+    st.markdown("### ⚡ Controls")
+    st.caption("Pick a mode. Tap a card. Get a strategy + citations.")
 
-          <div class="sidebar-links">
-            <a href="https://www.usc.edu" target="_blank">USC — University of Southern California</a>
-            <a href="https://gould.usc.edu/faculty/profile/d-daniel-sokol/" target="_blank">Professor D. Sokol</a>
-            <a href="https://www.marshall.usc.edu" target="_blank">USC Marshall School of Business</a>
-            <a href="https://www.marshall.usc.edu/departments/marketing" target="_blank">Marshall Marketing Department</a>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.divider()
-
-    st.markdown("<hr/>", unsafe_allow_html=True)
-
-    st.subheader("Model Settings")
-    st.toggle("Show Thinking Animation", key="show_thinking")
-    st.toggle("Show AI Reasoning", key="show_reasoning")
-    st.session_state.model_config["temperature"] = st.slider(
-        "Temperature", 0.0, 1.0, st.session_state.model_config["temperature"], 0.1
-    )
-    st.session_state.model_config["max_tokens"] = st.slider(
-        "Max Tokens", 128, 1024, st.session_state.model_config["max_tokens"], 128
-    )
-
-    # ✅ NEW: Mode toggle (Marketing/Sales/BD)
-    st.subheader("Business Mode")
     st.session_state.mode = st.selectbox(
-        "Assistant mode",
+        "Mode",
         ["Marketing", "Sales", "Business Development", "Product Strategy"],
         index=["Marketing", "Sales", "Business Development", "Product Strategy"].index(st.session_state.mode)
         if st.session_state.mode in ["Marketing", "Sales", "Business Development", "Product Strategy"] else 0
     )
 
-    def save_settings():
-        settings = {
-            "show_thinking": st.session_state.show_thinking,
-            "show_reasoning": st.session_state.show_reasoning,
-            "temperature": st.session_state.model_config["temperature"],
-            "max_tokens": st.session_state.model_config["max_tokens"],
-        }
-        with open("settings.json", "w") as f:
-            json.dump(settings, f)
-        st.sidebar.success("Settings saved!")
+    st.divider()
 
-    if st.button("💾 Save Settings"):
-        save_settings()
+    st.toggle("Thinking animation", key="show_thinking")
+    st.toggle("Show reasoning", key="show_reasoning")
 
-    # Function to reload all PDFs and update JSON (super experimental)
+    st.divider()
+
+    with st.expander("Advanced", expanded=False):
+        st.session_state.model_config["temperature"] = st.slider(
+            "Creativity",
+            0.0, 1.0,
+            st.session_state.model_config["temperature"],
+            0.1
+        )
+        st.session_state.model_config["top_p"] = st.slider(
+            "Diversity",
+            0.1, 1.0,
+            st.session_state.model_config.get("top_p", 0.9),
+            0.05
+        )
+
+        def save_settings():
+            settings = {
+                "show_thinking": st.session_state.show_thinking,
+                "show_reasoning": st.session_state.show_reasoning,
+                "temperature": st.session_state.model_config["temperature"],
+                "max_tokens": st.session_state.model_config["max_tokens"],  # internal
+            }
+            with open("settings.json", "w") as f:
+                json.dump(settings, f)
+            st.success("Saved ✨")
+
+        if st.button("Save", use_container_width=True):
+            save_settings()
+
+    # Keep your existing experimental PDF recalculation behavior
     def recalculate_pdf_data():
-        pdf_folder = "./knowledge_base"  # Root directory folder
+        pdf_folder = "./knowledge_base"
         pdf_files = [f for f in os.listdir(pdf_folder) if f.endswith(".pdf")]
 
         if not pdf_files:
@@ -523,14 +404,13 @@ with st.sidebar:
             return
 
         pdf_data = {"files": pdf_files}
-
         with open("pdf_data.json", "w") as json_file:
             json.dump(pdf_data, json_file, indent=4)
 
         st.sidebar.success("PDF data recalculated!")
 
-    st.sidebar.header("Options")
-    if st.sidebar.button("♻️ Recalculate PDF Data"):
+    st.markdown("### Docs")
+    if st.button("♻️ Recalculate PDF Data", use_container_width=True):
         with st.spinner("Processing PDFs..."):
             recalculate_pdf_data()
 
@@ -557,8 +437,8 @@ def display_response(parsed, placeholder):
     final_display.append(parsed["content"])
     placeholder.markdown("\n".join(final_display), unsafe_allow_html=True)
 
-# ✅ NEW: sanitize messages before sending to HF (prevents invalid schema due to "reasoning" key)
 def sanitize_messages(msgs):
+    """Remove extra keys (like reasoning) before sending to HF."""
     cleaned = []
     for m in msgs:
         if not isinstance(m, dict):
@@ -569,7 +449,6 @@ def sanitize_messages(msgs):
             cleaned.append({"role": role, "content": str(content)})
     return cleaned
 
-# ✅ NEW: marketing/sales/BD focused system prompt builder
 def build_system_prompt(retrieved_context: str, mode: str) -> str:
     mode_focus = {
         "Marketing": "positioning, segmentation, brand strategy, channels, pricing, experiments, messaging",
@@ -636,12 +515,11 @@ def generate_response():
                 unsafe_allow_html=True,
             )
 
-        # --- HF chat completion (SAFE) ---
         try:
             response = hf_client.chat.completions.create(
                 messages=sanitize_messages([
                     {"role": "system", "content": system_prompt},
-                    *st.session_state.messages[-6:],  # trim history for stability
+                    *st.session_state.messages[-6:],
                 ]),
                 max_tokens=st.session_state.model_config["max_tokens"],
                 temperature=st.session_state.model_config["temperature"],
@@ -649,20 +527,13 @@ def generate_response():
             )
 
             assistant_text = response.choices[0].message.content or ""
-
             if not assistant_text.strip():
-                assistant_text = (
-                    "I don’t have enough information in the documents "
-                    "to answer that question."
-                )
+                assistant_text = "I don’t have enough information in the documents to answer that question."
 
         except Exception:
-            assistant_text = (
-                "I’m having trouble reaching the model right now. "
-                "Please try again in a moment."
-            )
+            assistant_text = "I’m having trouble reaching the model right now. Please try again in a moment."
 
-        # --- Simulated streaming (UI) ---
+        # Simulated streaming (UI)
         full_response = ""
         for token in assistant_text.split():
             full_response += token + " "
@@ -680,27 +551,164 @@ def generate_response():
 
         display_response(parsed, response_placeholder)
 
-def is_response_incomplete(response):
-    """Check if response appears incomplete."""
-    response = response.strip()
-    return response and response[-1] not in [".", "!", "?", '"', "'"]
+###########################################
+# Quick Cards (Recent / Frequent / Recommended)
+###########################################
 
-def continue_response():
-    """Continue the last assistant response."""
-    if st.session_state.messages and st.session_state.messages[-1]["role"] == "assistant":
-        last_assistant = st.session_state.messages.pop()
-        st.session_state.messages.append({"role": "user", "content": "Please continue your previous answer."})
-        generate_response()
-        new_assistant = st.session_state.messages.pop()
-        combined_content = last_assistant["content"].strip() + "\n" + new_assistant["content"].strip()
-        combined_reasoning = (
-            last_assistant.get("reasoning", "").strip()
-            + "\n"
-            + new_assistant.get("reasoning", "").strip()
-        ).strip()
-        st.session_state.messages.append(
-            {"role": "assistant", "content": combined_content, "reasoning": combined_reasoning}
-        )
+if "recent_prompts" not in st.session_state:
+    st.session_state.recent_prompts = []  # newest first
+
+if "prompt_counts" not in st.session_state:
+    st.session_state.prompt_counts = {}  # prompt -> count
+
+def _track_prompt(prompt: str):
+    p = prompt.strip()
+    if not p:
+        return
+    st.session_state.recent_prompts = [x for x in st.session_state.recent_prompts if x != p]
+    st.session_state.recent_prompts.insert(0, p)
+    st.session_state.recent_prompts = st.session_state.recent_prompts[:6]
+    st.session_state.prompt_counts[p] = st.session_state.prompt_counts.get(p, 0) + 1
+
+def _run_prompt(prompt: str):
+    _track_prompt(prompt)
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    generate_response()
+
+def get_recent_cards():
+    return st.session_state.recent_prompts[:6]
+
+def get_frequent_cards():
+    items = sorted(st.session_state.prompt_counts.items(), key=lambda x: x[1], reverse=True)
+    return [p for p, c in items[:6]]
+
+RECOMMENDED = [
+    {
+        "title": "Marketing Basics: STP",
+        "desc": "Segmentation → Targeting → Positioning with citations.",
+        "prompt": "Using the PDFs, explain STP (segmentation, targeting, positioning) and apply it to Beer/AI/Video Games. Include [Source: ...] citations."
+    },
+    {
+        "title": "Positioning & Differentiation",
+        "desc": "Sharp positioning + defensible moat.",
+        "prompt": "Using the PDFs, write a positioning statement, 3 differentiators, and a competitor counter-positioning plan. Include [Source: ...] citations."
+    },
+    {
+        "title": "Segmentation & ICP",
+        "desc": "Find best-fit customers + what to say.",
+        "prompt": "Using the PDFs, define 3 customer segments + ICP, each segment’s pain points, and tailored messaging. Include [Source: ...] citations."
+    },
+    {
+        "title": "GTM Plan (30 days)",
+        "desc": "Channels, experiments, KPIs.",
+        "prompt": "Create a 30-day go-to-market plan based on the PDFs: channels, weekly experiments, messaging, KPIs, and risks. Include [Source: ...] citations."
+    },
+    {
+        "title": "Pricing & Monetization",
+        "desc": "Models + how to test pricing.",
+        "prompt": "Using the PDFs, propose 3 pricing models, when each wins, and a pricing experiment plan (hypothesis, test design, metrics). Include [Source: ...] citations."
+    },
+    {
+        "title": "Sales Pitch & Objections",
+        "desc": "Pitch + discovery + objections.",
+        "prompt": "Create a 30-second pitch, 2-minute pitch, 10 discovery questions, and 6 objections with responses using the PDFs. Include [Source: ...] citations."
+    },
+    {
+        "title": "BD Partnerships",
+        "desc": "Targets + deal structures.",
+        "prompt": "Suggest 8 partnership targets and propose 3 deal structures (rev share/license/co-sell). Add a partner outreach email. Use PDFs + citations."
+    },
+    {
+        "title": "Advanced: Growth Experiments",
+        "desc": "Hypothesis-driven growth loops.",
+        "prompt": "Using the PDFs, propose 6 growth experiments (hypothesis, channel, steps, success metric, risk). Include [Source: ...] citations."
+    },
+]
+
+st.markdown(
+    """
+    <style>
+    .qgrid { display:grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; }
+    @media (max-width: 900px) { .qgrid { grid-template-columns: 1fr; } }
+    .qcard {
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04);
+      border-radius: 18px;
+      padding: 14px 14px;
+      min-height: 92px;
+      margin-bottom: 0.35rem;
+    }
+    .qcard-top { display:flex; gap:0.5rem; align-items:center; margin-bottom: 0.35rem; }
+    .qcard-ico { font-size: 1.1rem; opacity: 0.9; }
+    .qcard-title { font-weight: 850; font-size: 1.02rem; }
+    .qcard-desc { opacity: 0.75; font-size: 0.93rem; line-height: 1.35; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+def _render_card(title: str, desc: str, prompt: str, icon: str, key: str):
+    st.markdown(
+        f"""
+        <div class="qcard">
+          <div class="qcard-top">
+            <span class="qcard-ico">{icon}</span>
+            <span class="qcard-title">{title}</span>
+          </div>
+          <div class="qcard-desc">{desc}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if st.button("Open", key=key, use_container_width=True):
+        _run_prompt(prompt)
+
+tab_recent, tab_freq, tab_rec = st.tabs(["🕒 Recent", "🔥 Frequent", "⭐ Recommended"])
+
+with tab_recent:
+    recents = get_recent_cards()
+    if not recents:
+        st.caption("No recent prompts yet — tap a Recommended card ⭐")
+    else:
+        cols = st.columns(3)
+        for idx, p in enumerate(recents):
+            with cols[idx % 3]:
+                _render_card(
+                    title="Recent prompt",
+                    desc=(p[:90] + "…") if len(p) > 90 else p,
+                    prompt=p,
+                    icon="🕒",
+                    key=f"recent_{idx}"
+                )
+
+with tab_freq:
+    freq = get_frequent_cards()
+    if not freq:
+        st.caption("Frequent prompts show up after a few clicks.")
+    else:
+        cols = st.columns(3)
+        for idx, p in enumerate(freq):
+            with cols[idx % 3]:
+                _render_card(
+                    title="Frequently used",
+                    desc=(p[:90] + "…") if len(p) > 90 else p,
+                    prompt=p,
+                    icon="🔥",
+                    key=f"freq_{idx}"
+                )
+
+with tab_rec:
+    st.caption("Basics → Advanced marketing themes. Tap to generate a guided answer.")
+    cols = st.columns(3)
+    for idx, item in enumerate(RECOMMENDED):
+        with cols[idx % 3]:
+            _render_card(
+                title=item["title"],
+                desc=item["desc"],
+                prompt=item["prompt"],
+                icon="⭐",
+                key=f"rec_{idx}"
+            )
 
 ###########################################
 # Chat History Display
@@ -731,11 +739,10 @@ if prompt := st.chat_input("Type your message..."):
         st.markdown(prompt)
     generate_response()
 
-# --- Top row above chat: title left, regenerate right (UI) ---
+# Regenerate button (kept)
 row_l, row_r = st.columns([0.78, 0.22], vertical_alignment="center")
 with row_l:
     st.markdown("###")
-
 with row_r:
     last_is_ai = len(st.session_state.messages) > 0 and st.session_state.messages[-1]["role"] == "assistant"
     if st.button("Regenerate", disabled=not last_is_ai, use_container_width=True):
