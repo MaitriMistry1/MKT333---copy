@@ -10,10 +10,7 @@ import pandas as pd
 from io import StringIO
 import time
 
-
 model = SentenceTransformer('bge-small-en-v1.5')
-
-
 
 def extract_text_from_pdf(pdf_path):
     text = ""
@@ -21,7 +18,6 @@ def extract_text_from_pdf(pdf_path):
         for page in doc:
             text += page.get_text() + "\n"
     return text
-
 
 def load_all_pdfs(folder_path):
     json_path = os.path.join(folder_path, "pdf_data.json")
@@ -53,7 +49,6 @@ def load_all_pdfs(folder_path):
         json.dump(docs, f)
     return [{"filename": doc["filename"], "text": doc["text"]} for doc in docs]
 
-
 def split_text(text, max_length=5000):
     sentences = text.split('\n')
     chunks = []
@@ -68,7 +63,6 @@ def split_text(text, max_length=5000):
         chunks.append(current_chunk.strip())
     return chunks
 
-
 def build_vector_store(docs):
     all_chunks = []
     metadata = []
@@ -82,13 +76,11 @@ def build_vector_store(docs):
     index.add(embeddings)
     return index, all_chunks, metadata
 
-
 def retrieve_context(query, index, chunks, top_k=2):
     query_embedding = model.encode([query], convert_to_numpy=True)
     distances, indices = index.search(query_embedding, top_k)
     retrieved = [chunks[i] for i in indices[0]]
     return "\n\n".join(retrieved)
-
 
 # Evaluation functions
 TEST_SET = [
@@ -176,7 +168,6 @@ def evaluate_accuracy(test_set, vector_index, chunks, model_config):
         })
     return results
 
-
 def generate_report(results):
     report = StringIO()
     report.write("=== NSU Campus AI Assistant Accuracy Report ===\n")
@@ -196,10 +187,8 @@ def generate_report(results):
         report.write("-" * 50 + "\n")
     return report.getvalue()
 
-
 # Streamlit app setup
 st.set_page_config(initial_sidebar_state="collapsed")
-
 
 # Session state initialization with explicit vector store setup
 def initialize_vector_store():
@@ -220,7 +209,6 @@ def initialize_vector_store():
         st.session_state.chunks = None
         st.session_state.metadatas = None
         st.warning("No PDFs found in './pdfs' folder. Please add PDFs to enable functionality.")
-
 
 if "vector_index" not in st.session_state:
     initialize_vector_store()
@@ -254,7 +242,6 @@ with st.sidebar:
                 file_name=f"chatbot_accuracy_report_{time.strftime('%Y%m%d_%H%M%S')}.txt",
                 mime="text/plain"
             )
-
 
 st.title("NSU Campus AI Assistant")
 for message in st.session_state.messages:
