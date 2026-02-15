@@ -9,13 +9,14 @@ import json
 from typing import Optional  # ✅ ADD THIS
 from huggingface_hub import InferenceClient
 from sentence_transformers import SentenceTransformer
-from huggingface_hub import login, HfApi 
+from huggingface_hub import login, HfApi
+
 # -----------------------------
 # Syllabus file helper (UI)
 # -----------------------------
 SYLLABUS_CANDIDATE_PATHS = [
     r"D:\Maitri\USC\Grader\knowledge_base\MKT 333 - Innovation Economics and Business - Beer AI and Video Games - Syllabus - 12-26-2025.pdf"
-    ]
+]
 
 def load_syllabus_bytes():
     for p in SYLLABUS_CANDIDATE_PATHS:
@@ -61,7 +62,7 @@ def hf_token_ok(token: str) -> bool:
         HfApi().whoami(token=token)
         return True
     except Exception:
-        return False 
+        return False
 
 if not HF_TOKEN or not hf_token_ok(HF_TOKEN):
     st.error("Hugging Face token missing or invalid.")
@@ -157,6 +158,7 @@ def get_embedder():
     return SentenceTransformer("BAAI/bge-small-en-v1.5")
 
 model = get_embedder()
+
 def build_vector_store(docs):
     """Build a FAISS vector store from document chunks."""
     all_chunks = []
@@ -171,14 +173,18 @@ def build_vector_store(docs):
     index.add(embeddings)
     return index, all_chunks, metadata
 
-def retrieve_context(query, index, chunks, top_k=5):
-    """Retrieve relevant context from the vector store."""
+# ✅ UPDATED: include filenames in retrieved context so the model can cite
+def retrieve_context(query, index, chunks, metadatas, top_k=5):
+    """Retrieve relevant context from the vector store, including source labels."""
     query_embedding = model.encode([query], convert_to_numpy=True)
     distances, indices = index.search(query_embedding, top_k)
-    retrieved = [chunks[i] for i in indices[0]]
-    return "\n\n".join(retrieved)
 
-# Theme toggle state
+    retrieved_blocks = []
+    for i in indices[0]:
+        fname = metadatas[i].get("filename", "unknown") if metadatas else "unknown"
+        retrieved_blocks.append(f"[Source: {fname}]\n{chunks[i]}")
+    return "\n\n---\n\n".join(retrieved_blocks)
+
 ###########################################
 # Chatbot Interface and Styling (UI ONLY)
 ###########################################
@@ -199,12 +205,6 @@ with left:
         """,
         unsafe_allow_html=True,
     )
-
-#with right:
-   # st.session_state.ui_dark_mode = st.toggle(
-   #     "Dark mode",
-        #value=st.session_state.ui_dark_mode,
-    #)
 
 # Theme variables (UI CSS)
 if st.session_state.ui_dark_mode:
@@ -309,7 +309,7 @@ section[data-testid="stSidebar"] {{
   border: 1px solid {border};
   border-radius: 18px;
   padding: 18px 18px;
-  text-align: center;                 /* ✅ center everything */
+  text-align: center;
 }}
 .course-line {{
   font-size: 0.98rem;
@@ -319,13 +319,13 @@ section[data-testid="stSidebar"] {{
 }}
 .hero-title {{
   margin-top: 8px;
-  font-size: 1.70rem;                 /* ✅ bigger */
-  font-weight: 900;                   /* ✅ strong heading */
+  font-size: 1.70rem;
+  font-weight: 900;
   letter-spacing: 0.2px;
 }}
 .hero-sub {{
   margin-top: 6px;
-  font-size: 1.02rem;                 /* ✅ readable */
+  font-size: 1.02rem;
   color: {mut};
 }}
 .tagline {{
@@ -367,8 +367,7 @@ section[data-testid="stSidebar"] {{
   margin-right: auto;
 }}
 
-/* ✅ Fix: dark mode showing black chat text
-   Force ALL chat content to use theme text color */
+/* Force chat text color */
 [data-testid="stChatMessage"] * {{
   color: {text} !important;
 }}
@@ -382,7 +381,7 @@ section[data-testid="stSidebar"] {{
   color: {accent2} !important;
 }}
 
-/* ✅ Bigger chat input (height + font) */
+/* Bigger chat input */
 .stChatInput {{
   border-top: 1px solid {border};
   background: transparent;
@@ -392,16 +391,15 @@ section[data-testid="stSidebar"] {{
   color: {text} !important;
   border-radius: 16px !important;
   border: 1px solid {border} !important;
-  font-size: 1.08rem !important;      /* ✅ bigger font */
+  font-size: 1.08rem !important;
   line-height: 1.45 !important;
-  min-height: 72px !important;        /* ✅ taller box */
+  min-height: 72px !important;
   padding: 14px 16px !important;
 }}
 .stChatInput textarea::placeholder {{
   color: {mut} !important;
 }}
 
-/* Sidebar tidy */
 section[data-testid="stSidebar"] {{
   border-right: 1px solid {border};
 }}
@@ -424,6 +422,10 @@ if "messages" not in st.session_state:
     }
     st.session_state.show_thinking = True
     st.session_state.show_reasoning = True
+
+# ✅ NEW: mode toggle default
+if "mode" not in st.session_state:
+    st.session_state.mode = "Marketing"
 
 # Load saved settings
 if os.path.exists("settings.json"):
@@ -476,9 +478,6 @@ with st.sidebar:
 
     st.divider()
 
-    # Keep your existing Controls below (Regenerate, toggles, sliders, etc.)
-
-
     st.markdown("<hr/>", unsafe_allow_html=True)
 
     st.subheader("Model Settings")
@@ -489,6 +488,15 @@ with st.sidebar:
     )
     st.session_state.model_config["max_tokens"] = st.slider(
         "Max Tokens", 128, 1024, st.session_state.model_config["max_tokens"], 128
+    )
+
+    # ✅ NEW: Mode toggle (Marketing/Sales/BD)
+    st.subheader("Business Mode")
+    st.session_state.mode = st.selectbox(
+        "Assistant mode",
+        ["Marketing", "Sales", "Business Development", "Product Strategy"],
+        index=["Marketing", "Sales", "Business Development", "Product Strategy"].index(st.session_state.mode)
+        if st.session_state.mode in ["Marketing", "Sales", "Business Development", "Product Strategy"] else 0
     )
 
     def save_settings():
@@ -505,7 +513,7 @@ with st.sidebar:
     if st.button("💾 Save Settings"):
         save_settings()
 
-    # Function to reload all PDFs and update JSON (super experimental) not sure if this helps or not, in theory JSON should help
+    # Function to reload all PDFs and update JSON (super experimental)
     def recalculate_pdf_data():
         pdf_folder = "./knowledge_base"  # Root directory folder
         pdf_files = [f for f in os.listdir(pdf_folder) if f.endswith(".pdf")]
@@ -549,25 +557,67 @@ def display_response(parsed, placeholder):
     final_display.append(parsed["content"])
     placeholder.markdown("\n".join(final_display), unsafe_allow_html=True)
 
+# ✅ NEW: sanitize messages before sending to HF (prevents invalid schema due to "reasoning" key)
+def sanitize_messages(msgs):
+    cleaned = []
+    for m in msgs:
+        if not isinstance(m, dict):
+            continue
+        role = m.get("role")
+        content = m.get("content", "")
+        if role in {"system", "user", "assistant"}:
+            cleaned.append({"role": role, "content": str(content)})
+    return cleaned
+
+# ✅ NEW: marketing/sales/BD focused system prompt builder
+def build_system_prompt(retrieved_context: str, mode: str) -> str:
+    mode_focus = {
+        "Marketing": "positioning, segmentation, brand strategy, channels, pricing, experiments, messaging",
+        "Sales": "discovery, qualification (BANT/MEDDICC), objection handling, pitch, ROI framing, closing",
+        "Business Development": "partners, alliances, deal structures, integrations, co-marketing, distribution",
+        "Product Strategy": "JTBD, differentiation, roadmap, growth loops, activation, retention"
+    }.get(mode, "marketing strategy")
+
+    return f"""
+You are a {mode} analyst for MKT 333 (Beer • AI • Video Games).
+Focus areas: {mode_focus}
+
+Rules:
+- Use ONLY the retrieved context as the factual source. If the context doesn’t support a claim, say: "I don’t have enough information in the documents."
+- Cite evidence using the labels in the context, like: [Source: filename.pdf]
+- Be concrete, actionable, and business-oriented (plans, scripts, metrics).
+- If the user asks for a plan, provide steps + metrics + risks + assumptions.
+
+Retrieved context:
+{retrieved_context}
+
+Response format (always):
+1) Executive takeaway (1–2 sentences)
+2) Evidence (bullets with citations)
+3) Strategy / Recommendation (what to do next)
+4) Script (pitch/email/talking points appropriate to the selected mode)
+5) Metrics to track (3–6)
+6) Risks & assumptions
+""".strip()
+
 def generate_response():
     """Generate and display AI response with RAG context."""
     user_prompt = st.session_state.messages[-1]["content"]
 
     retrieved_context = ""
-    if st.session_state.vector_index is not None and st.session_state.chunks is not None:
+    if (
+        st.session_state.vector_index is not None
+        and st.session_state.chunks is not None
+        and st.session_state.metadatas is not None
+    ):
         retrieved_context = retrieve_context(
             user_prompt,
             st.session_state.vector_index,
             st.session_state.chunks,
+            st.session_state.metadatas,
         )
 
-    system_prompt = f"""
-    Use the following retrieved context to answer the query accurately:
-    {retrieved_context}
-
-    Try to always cite information from the documents. If unsure, say
-    'I don’t have enough information to answer this.'
-    """
+    system_prompt = build_system_prompt(retrieved_context, st.session_state.mode)
 
     with st.chat_message("assistant", avatar=ai_avatar):
         response_placeholder = st.empty()
@@ -589,10 +639,10 @@ def generate_response():
         # --- HF chat completion (SAFE) ---
         try:
             response = hf_client.chat.completions.create(
-                messages=[
+                messages=sanitize_messages([
                     {"role": "system", "content": system_prompt},
                     *st.session_state.messages[-6:],  # trim history for stability
-                ],
+                ]),
                 max_tokens=st.session_state.model_config["max_tokens"],
                 temperature=st.session_state.model_config["temperature"],
                 top_p=st.session_state.model_config["top_p"],
@@ -630,7 +680,6 @@ def generate_response():
 
         display_response(parsed, response_placeholder)
 
-
 def is_response_incomplete(response):
     """Check if response appears incomplete."""
     response = response.strip()
@@ -658,7 +707,6 @@ def continue_response():
 ###########################################
 
 for message in st.session_state.messages:
-    
     role = "user" if message["role"] == "user" else "AI"
     with st.chat_message(role, avatar=user_avatar if role == "user" else ai_avatar):
         reasoning = message.get("reasoning", "")
@@ -694,10 +742,4 @@ with row_r:
         if st.session_state.messages and st.session_state.messages[-1]["role"] == "assistant":
             st.session_state.messages.pop()
             st.session_state.regenerate = True
-
             st.rerun()
-
-
-
-
-
