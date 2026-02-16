@@ -248,7 +248,7 @@ st.markdown(
 }}
 .hero-title {{
   margin-top: 8px;
-  font-size: 1.70rem;
+  font-size: 1.08rem;
   font-weight: 900;
   letter-spacing: 0.2px;
 }}
@@ -809,3 +809,4 @@ with row_r:
             st.session_state.messages.pop()
             st.session_state.regenerate = True
             st.rerun()
+
