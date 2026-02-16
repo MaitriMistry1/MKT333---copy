@@ -312,21 +312,25 @@ st.markdown(
 }}
 
 /* Force ALL AI content to the SAME small size */
-[data-testid="stChatMessage"][aria-label="AI"] * {{
+[data-testid="stChatMessage"][aria-label="AI"] [data-testid="stChatMessageContent"] * {
   font-size: 0.98rem !important;
   line-height: 1.6 !important;
   font-weight: 400 !important;
-}}
+}
 
-/* Headings: same size, only a bit bolder */
-[data-testid="stChatMessage"][aria-label="AI"] h1,
-[data-testid="stChatMessage"][aria-label="AI"] h2,
-[data-testid="stChatMessage"][aria-label="AI"] h3,
-[data-testid="stChatMessage"][aria-label="AI"] h4 {{
+/* Headings often have stronger default CSS — hard override them too */
+[data-testid="stChatMessage"][aria-label="AI"] [data-testid="stChatMessageContent"] h1,
+[data-testid="stChatMessage"][aria-label="AI"] [data-testid="stChatMessageContent"] h2,
+[data-testid="stChatMessage"][aria-label="AI"] [data-testid="stChatMessageContent"] h3,
+[data-testid="stChatMessage"][aria-label="AI"] [data-testid="stChatMessageContent"] h4,
+[data-testid="stChatMessage"][aria-label="AI"] [data-testid="stChatMessageContent"] h5,
+[data-testid="stChatMessage"][aria-label="AI"] [data-testid="stChatMessageContent"] h6 {
   font-size: 0.98rem !important;
+  line-height: 1.6 !important;
   font-weight: 800 !important;
   margin: 0.35rem 0 0.2rem 0 !important;
-}}
+}
+
 
 /* Consistent text colors */
 [data-testid="stChatMessage"] * {{
@@ -829,3 +833,4 @@ with row_r:
             st.session_state.messages.pop()
             st.session_state.regenerate = True
             st.rerun()
+
