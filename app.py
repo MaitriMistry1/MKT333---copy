@@ -419,7 +419,7 @@ with st.sidebar:
         """,
         unsafe_allow_html=True,
     )
-        def save_settings():
+    def save_settings():
             settings = {
                 "show_thinking": st.session_state.show_thinking,
                 "show_reasoning": st.session_state.show_reasoning,
@@ -711,6 +711,7 @@ with row_r:
             st.session_state.messages.pop()
             st.session_state.regenerate = True
             st.rerun()
+
 
 
 
