@@ -290,13 +290,13 @@ st.markdown(
 }}
 
 /* AI message container: transparent */
-[data-testid="stChatMessage"][aria-label="AI"] {
+[data-testid="stChatMessage"][aria-label="AI"] {{
   background: transparent !important;
   border: none !important;
   padding: 0.10rem 0 !important;
   margin-right: auto !important;
   max-width: 96% !important;
-}
+}}
 
 /* AI text sizing (smaller, clean) */
 /* AI message container */
@@ -845,6 +845,7 @@ with row_r:
             st.session_state.messages.pop()
             st.session_state.regenerate = True
             st.rerun()
+
 
 
 
