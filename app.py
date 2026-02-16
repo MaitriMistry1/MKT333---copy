@@ -299,15 +299,16 @@ st.markdown(
 }
 
 /* AI text sizing (smaller, clean) */
-[data-testid="stChatMessage"][aria-label="AI"] p,
-[data-testid="stChatMessage"][aria-label="AI"] li {{
-  font-size: 0.98rem !important;
-  line-height: 1.6 !important;
-  font-weight: 400 !important;
-}}
+/* AI message container */
+[data-testid="stChatMessage"][aria-label="AI"] {
+  background: transparent !important;
+  border: none !important;
+  padding: 0.1rem 0 !important;
+  margin-right: auto !important;
+  max-width: 96% !important;
+}
 
-/* Optional: AI headings controlled */
-/* Force ALL AI content to the same small size */
+/* Force all AI content to small uniform size */
 [data-testid="stChatMessage"][aria-label="AI"] * {
   font-size: 0.98rem !important;
   line-height: 1.6 !important;
@@ -844,5 +845,6 @@ with row_r:
             st.session_state.messages.pop()
             st.session_state.regenerate = True
             st.rerun()
+
 
 
