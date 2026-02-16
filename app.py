@@ -1,3 +1,4 @@
+# app.py (cleaned + fixed)
 import streamlit as st
 import re
 import os
@@ -17,6 +18,7 @@ SYLLABUS_CANDIDATE_PATHS = [
     r"D:\Maitri\USC\Grader\knowledge_base\MKT 333 - Innovation Economics and Business - Beer AI and Video Games - Syllabus - 12-26-2025.pdf"
 ]
 
+
 def load_syllabus_bytes():
     for p in SYLLABUS_CANDIDATE_PATHS:
         try:
@@ -26,6 +28,7 @@ def load_syllabus_bytes():
         except Exception:
             continue
     return None, None
+
 
 # -----------------------------
 # Page config (UI)
@@ -50,7 +53,9 @@ def get_hf_token() -> Optional[str]:
     tok = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACEHUB_API_TOKEN")
     return tok.strip() if tok else None
 
+
 HF_TOKEN = get_hf_token()
+
 
 def hf_token_ok(token: str) -> bool:
     try:
@@ -58,6 +63,7 @@ def hf_token_ok(token: str) -> bool:
         return True
     except Exception:
         return False
+
 
 if not HF_TOKEN or not hf_token_ok(HF_TOKEN):
     st.error("Hugging Face token missing or invalid.")
@@ -72,6 +78,7 @@ hf_client = InferenceClient(
 # PDF Extraction and RAG Functions with Caching
 ###########################################
 
+
 def extract_text_from_pdf(pdf_path):
     text = ""
     with fitz.open(pdf_path) as doc:
@@ -81,6 +88,7 @@ def extract_text_from_pdf(pdf_path):
             cleaned_text = re.sub(r"Page \d+", "", cleaned_text)
             text += cleaned_text + "\n"
     return text.strip()
+
 
 def load_all_pdfs(folder_path):
     """Load all PDFs using cached JSON if available and up-to-date."""
@@ -130,6 +138,7 @@ def load_all_pdfs(folder_path):
 
     return [{"filename": doc["filename"], "text": doc["text"]} for doc in docs]
 
+
 def split_text(text, max_length=5000):
     sentences = text.split("\n")
     chunks = []
@@ -144,11 +153,14 @@ def split_text(text, max_length=5000):
         chunks.append(current_chunk.strip())
     return chunks
 
+
 @st.cache_resource
 def get_embedder():
     return SentenceTransformer("BAAI/bge-small-en-v1.5")
 
+
 model = get_embedder()
+
 
 def build_vector_store(docs):
     all_chunks = []
@@ -163,6 +175,7 @@ def build_vector_store(docs):
     index.add(embeddings)
     return index, all_chunks, metadata
 
+
 def retrieve_context(query, index, chunks, metadatas, top_k=5):
     """Retrieve relevant context from the vector store, including [Source: filename] labels."""
     query_embedding = model.encode([query], convert_to_numpy=True)
@@ -174,6 +187,7 @@ def retrieve_context(query, index, chunks, metadatas, top_k=5):
         retrieved_blocks.append(f"[Source: {fname}]\n{chunks[i]}")
     return "\n\n---\n\n".join(retrieved_blocks)
 
+
 ###########################################
 # UI Theme + Styling
 ###########################################
@@ -181,7 +195,7 @@ def retrieve_context(query, index, chunks, metadatas, top_k=5):
 if "ui_dark_mode" not in st.session_state:
     st.session_state.ui_dark_mode = False
 
-left, right = st.columns([0.97, 0.20], vertical_alignment="center")
+left, _right = st.columns([0.97, 0.20], vertical_alignment="center")
 with left:
     st.markdown(
         """
@@ -270,7 +284,6 @@ st.markdown(
 }}
 
 /* ===== Chat: remove "white box" look ===== */
-/* Make containers transparent by default */
 .stChatMessage {{
   background: transparent !important;
   border: none !important;
@@ -279,7 +292,7 @@ st.markdown(
   max-width: 100% !important;
 }}
 
-/* User bubble stays bubble */
+/* User bubble */
 [data-testid="stChatMessage"][aria-label="user"] {{
   background: {user_bg} !important;
   border: 1px solid {border} !important;
@@ -289,7 +302,7 @@ st.markdown(
   max-width: 88% !important;
 }}
 
-/* AI message container: transparent */
+/* AI container transparent */
 [data-testid="stChatMessage"][aria-label="AI"] {{
   background: transparent !important;
   border: none !important;
@@ -298,33 +311,24 @@ st.markdown(
   max-width: 96% !important;
 }}
 
-/* AI text sizing (smaller, clean) */
-/* AI message container */
-[data-testid="stChatMessage"][aria-label="AI"] {
-  background: transparent !important;
-  border: none !important;
-  padding: 0.1rem 0 !important;
-  margin-right: auto !important;
-  max-width: 96% !important;
-}
-
-/* Force all AI content to small uniform size */
-[data-testid="stChatMessage"][aria-label="AI"] * {
+/* Force ALL AI content to the SAME small size */
+[data-testid="stChatMessage"][aria-label="AI"] * {{
   font-size: 0.98rem !important;
   line-height: 1.6 !important;
   font-weight: 400 !important;
-}
+}}
 
-/* Optional: keep headings from looking like headings at all */
+/* Headings: same size, only a bit bolder */
 [data-testid="stChatMessage"][aria-label="AI"] h1,
 [data-testid="stChatMessage"][aria-label="AI"] h2,
 [data-testid="stChatMessage"][aria-label="AI"] h3,
-[data-testid="stChatMessage"][aria-label="AI"] h4 {
+[data-testid="stChatMessage"][aria-label="AI"] h4 {{
+  font-size: 0.98rem !important;
+  font-weight: 800 !important;
   margin: 0.35rem 0 0.2rem 0 !important;
-  font-weight: 800 !important;  /* still slightly bolder, but same size */
-}
+}}
 
-/* Keep text colors consistent */
+/* Consistent text colors */
 [data-testid="stChatMessage"] * {{
   color: {text} !important;
 }}
@@ -355,12 +359,12 @@ st.markdown(
   color: {mut} !important;
 }}
 
-/* Softer buttons */
+/* Buttons */
 .stButton button {{
   border-radius: 14px !important;
 }}
 
-/* ===== Suggestions (template vibe) ===== */
+/* ===== Suggestions ===== */
 .sugg-head {{
   display:flex;
   align-items:flex-end;
@@ -376,14 +380,6 @@ st.markdown(
   color: {mut};
   font-size: 0.95rem;
   margin-top: 2px;
-}}
-.sugg-grid {{
-  display:grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.75rem;
-}}
-@media (max-width: 900px) {{
-  .sugg-grid {{ grid-template-columns: 1fr; }}
 }}
 .sugg-card {{
   background: rgba(255,255,255,0.02);
@@ -403,7 +399,7 @@ st.markdown(
   line-height: 1.35;
 }}
 
-/* ===== Sidebar quick links (like screenshot 2) ===== */
+/* ===== Sidebar quick links ===== */
 .sidebar-card {{
   background: {sb_card};
   border: 1px solid {sb_border};
@@ -460,13 +456,13 @@ if "messages" not in st.session_state:
     st.session_state.model_config = {
         "temperature": 0.2,
         "top_p": 0.9,
-        "max_tokens": 912,        # internal
-        "repeat_penalty": 1.1,    # internal
+        "max_tokens": 912,
+        "repeat_penalty": 1.1,
     }
     st.session_state.show_thinking = True
     st.session_state.show_reasoning = True
 
-# Show suggestions ONLY once per fresh session until the user interacts (click OR types)
+# Show suggestions ONLY once per session until user interacts
 if "show_suggestions" not in st.session_state:
     st.session_state.show_suggestions = True
 
@@ -498,7 +494,7 @@ if "vector_index" not in st.session_state:
         st.session_state.metadatas = None
 
 ###########################################
-# Sidebar (USC quick links back + minimal controls)
+# Sidebar (USC quick links + minimal controls)
 ###########################################
 
 with st.sidebar:
@@ -527,16 +523,10 @@ with st.sidebar:
 
     with st.expander("Advanced", expanded=False):
         st.session_state.model_config["temperature"] = st.slider(
-            "Creativity",
-            0.0, 1.0,
-            st.session_state.model_config["temperature"],
-            0.1
+            "Creativity", 0.0, 1.0, st.session_state.model_config["temperature"], 0.1
         )
         st.session_state.model_config["top_p"] = st.slider(
-            "Diversity",
-            0.1, 1.0,
-            st.session_state.model_config.get("top_p", 0.9),
-            0.05
+            "Diversity", 0.1, 1.0, st.session_state.model_config.get("top_p", 0.9), 0.05
         )
 
         def save_settings():
@@ -553,20 +543,22 @@ with st.sidebar:
         if st.button("Save", use_container_width=True):
             save_settings()
 
-    # Keep your existing experimental PDF recalculation behavior
     def recalculate_pdf_data():
         pdf_folder = "./knowledge_base"
-        pdf_files = [f for f in os.listdir(pdf_folder) if f.endswith(".pdf")]
+        if not os.path.exists(pdf_folder):
+            st.error("Folder './knowledge_base' not found.")
+            return
 
+        pdf_files = [f for f in os.listdir(pdf_folder) if f.endswith(".pdf")]
         if not pdf_files:
-            st.sidebar.error("No PDFs found in 'pdfs' folder.")
+            st.error("No PDFs found in './knowledge_base'.")
             return
 
         pdf_data = {"files": pdf_files}
         with open("pdf_data.json", "w") as json_file:
             json.dump(pdf_data, json_file, indent=4)
 
-        st.sidebar.success("PDF data recalculated!")
+        st.success("PDF data recalculated!")
 
     st.markdown("### Docs")
     if st.button("♻️ Recalculate PDF Data", use_container_width=True):
@@ -581,23 +573,22 @@ ai_avatar = "🤖"
 # Chat Functions
 ###########################################
 
-def parse_response(response):
-    """Extract reasoning and content from response using <think> tags."""
+def parse_response(response: str):
     match = re.search(r"<think>(.*?)</think>(.*)", response, re.DOTALL)
     if match:
         return {"reasoning": match.group(1).strip(), "content": match.group(2).strip()}
     return {"reasoning": "", "content": response}
 
+
 def display_response(parsed, placeholder):
-    """Display response with optional reasoning."""
     final_display = []
     if st.session_state.show_reasoning and parsed["reasoning"]:
         final_display.append(f"<div class='reasoning'>🤔 {parsed['reasoning']}</div>")
     final_display.append(parsed["content"])
     placeholder.markdown("\n".join(final_display), unsafe_allow_html=True)
 
+
 def sanitize_messages(msgs):
-    """Remove extra keys (like reasoning) before sending to HF."""
     cleaned = []
     for m in msgs:
         if not isinstance(m, dict):
@@ -607,6 +598,7 @@ def sanitize_messages(msgs):
         if role in {"system", "user", "assistant"}:
             cleaned.append({"role": role, "content": str(content)})
     return cleaned
+
 
 def build_system_prompt(retrieved_context: str) -> str:
     return f"""
@@ -646,8 +638,8 @@ Retrieved context:
 {retrieved_context}
 """.strip()
 
+
 def generate_response():
-    """Generate and display AI response with RAG context."""
     user_prompt = st.session_state.messages[-1]["content"]
 
     retrieved_context = ""
@@ -684,19 +676,16 @@ def generate_response():
 
         try:
             response = hf_client.chat.completions.create(
-                messages=sanitize_messages([
-                    {"role": "system", "content": system_prompt},
-                    *st.session_state.messages[-6:],
-                ]),
+                messages=sanitize_messages(
+                    [{"role": "system", "content": system_prompt}, *st.session_state.messages[-6:]]
+                ),
                 max_tokens=st.session_state.model_config["max_tokens"],
                 temperature=st.session_state.model_config["temperature"],
                 top_p=st.session_state.model_config["top_p"],
             )
-
             assistant_text = response.choices[0].message.content or ""
             if not assistant_text.strip():
                 assistant_text = "I don’t have enough information in the documents to answer that question."
-
         except Exception:
             assistant_text = "I’m having trouble reaching the model right now. Please try again in a moment."
 
@@ -709,17 +698,12 @@ def generate_response():
 
         parsed = parse_response(full_response)
         st.session_state.messages.append(
-            {
-                "role": "assistant",
-                "content": parsed["content"],
-                "reasoning": parsed["reasoning"],
-            }
+            {"role": "assistant", "content": parsed["content"], "reasoning": parsed["reasoning"]}
         )
-
         display_response(parsed, response_placeholder)
 
 ###########################################
-# One-time Suggestions (Recommended only)
+# One-time Suggestions
 ###########################################
 
 SUGGESTIONS = [
@@ -765,6 +749,7 @@ SUGGESTIONS = [
     },
 ]
 
+
 def run_suggestion(prompt: str):
     st.session_state.show_suggestions = False
     st.session_state.messages.append({"role": "user", "content": prompt})
@@ -784,7 +769,7 @@ for message in st.session_state.messages:
         else:
             st.markdown(content)
 
-# Suggestions: show once (after greeting), disappear forever after first click OR typing
+# Suggestions: show once (after greeting)
 if st.session_state.show_suggestions and len(st.session_state.messages) <= 1:
     st.markdown(
         """
@@ -828,7 +813,6 @@ if hasattr(st.session_state, "regenerate") and st.session_state.regenerate:
 
 if prompt := st.chat_input("Type your message..."):
     st.session_state.show_suggestions = False
-
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user", avatar=user_avatar):
         st.markdown(prompt)
@@ -845,7 +829,3 @@ with row_r:
             st.session_state.messages.pop()
             st.session_state.regenerate = True
             st.rerun()
-
-
-
-
