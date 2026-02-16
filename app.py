@@ -780,7 +780,7 @@ if st.session_state.show_suggestions and len(st.session_state.messages) <= 1:
                 """,
                 unsafe_allow_html=True,
             )
-            if st.button("Open", key=f"sugg_{idx}", use_container_width=True):
+            if st.button("Continue in chat", key=f"sugg_{idx}", use_container_width=True):
                 run_suggestion(item["prompt"])
 
 ###########################################
@@ -815,4 +815,5 @@ with row_r:
             st.session_state.messages.pop()
             st.session_state.regenerate = True
             st.rerun()
+
 
