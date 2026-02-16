@@ -228,8 +228,7 @@ else:
     sb_badge_border = "rgba(179,134,0,0.18)"
     sb_badge_text = "rgba(11,18,32,0.85)"
 
-st.markdown(
-    f"""
+st.markdown("""
 <style>
 .stApp {{
   background: {bg};
@@ -418,9 +417,7 @@ hr {{
   box-shadow: 0 0 0 2px rgba(255,204,0,0.08);
 }}
 </style>
-""",
-    unsafe_allow_html=True,
-)
+""", unsafe_allow_html=True)
 
 ###########################################
 # Session State Initialization
@@ -823,6 +820,7 @@ with row_r:
             st.session_state.messages.pop()
             st.session_state.regenerate = True
             st.rerun()
+
 
 
 
