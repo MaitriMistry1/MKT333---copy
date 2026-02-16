@@ -430,7 +430,7 @@ with st.sidebar:
                 json.dump(settings, f)
             st.success("Saved ✨")
 
-        if st.button("Save", use_container_width=True):
+    if st.button("Save", use_container_width=True):
             save_settings()
 
     # Keep your existing experimental PDF recalculation behavior
@@ -711,6 +711,7 @@ with row_r:
             st.session_state.messages.pop()
             st.session_state.regenerate = True
             st.rerun()
+
 
 
 
