@@ -738,15 +738,21 @@ def run_suggestion(prompt: str):
 # Chat History Display
 ###########################################
 
-for message in st.session_state.messages:
+for i, message in enumerate(st.session_state.messages):
     role = "user" if message["role"] == "user" else "AI"
     with st.chat_message(role, avatar=user_avatar if role == "user" else ai_avatar):
         reasoning = message.get("reasoning", "")
         content = message.get("content", "")
+
+        # Only the FIRST assistant message gets the hello bubble
+        if role == "AI" and i == 0:
+            content = f"<div class='hello-bubble'>{content}</div>"
+
         if st.session_state.show_reasoning and reasoning:
             st.markdown(f"<div class='reasoning'>🤔 {reasoning}</div>{content}", unsafe_allow_html=True)
         else:
-            st.markdown(content)
+            st.markdown(content, unsafe_allow_html=True)
+
 
 # Suggestions: show once (after greeting), disappear forever after first click OR typing
 if st.session_state.show_suggestions and len(st.session_state.messages) <= 1:
@@ -809,3 +815,4 @@ with row_r:
             st.session_state.messages.pop()
             st.session_state.regenerate = True
             st.rerun()
+
