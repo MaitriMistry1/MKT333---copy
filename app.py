@@ -260,30 +260,38 @@ st.markdown(
 
 /* ===== Chat: remove "white box" look ===== */
 /* Make message containers transparent by default */
-.stChatMessage {{
-  background: transparent !important;
-  border: none !important;
-  padding: 0.35rem 0 !important;
-  margin: 0.65rem 0 !important;
-  max-width: 100% !important;
-}}
-/* User bubble stays bubble */
-[data-testid="stChatMessage"][aria-label="user"] {{
-  background: {user_bg} !important;
-  border: 1px solid {border} !important;
-  border-radius: 18px !important;
-  padding: 1.00rem 1.05rem !important;
-  margin-left: auto !important;
-  max-width: 88% !important;
-}}
-/* AI answer: no box, just clean text */
-[data-testid="stChatMessage"][aria-label="AI"] {{
+[data-testid="stChatMessage"][aria-label="AI"]{
   background: transparent !important;
   border: none !important;
   padding: 0.1rem 0 !important;
   margin-right: auto !important;
   max-width: 96% !important;
-}}
+}
+/* User bubble stays bubble */
+[data-testid="stChatMessage"][aria-label="user"]{
+  background: var(--user-bg) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 18px !important;
+  padding: 1.00rem 1.05rem !important;
+  margin-left: auto !important;
+  max-width: 88% !important;
+}
+/* AI answer: no box, just clean text */
+[data-testid="stChatMessage"][aria-label="AI"]{
+  background: transparent !important;
+  border: none !important;
+  padding: 0.1rem 0 !important;
+  margin-right: auto !important;
+  max-width: 96% !important;
+}
+.hello-bubble{
+  display: inline-block;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 1.00rem 1.05rem;
+  max-width: 88%;
+}
 /* Keep text colors consistent */
 [data-testid="stChatMessage"] * {{
   color: {text} !important;
@@ -815,5 +823,6 @@ with row_r:
             st.session_state.messages.pop()
             st.session_state.regenerate = True
             st.rerun()
+
 
 
