@@ -307,21 +307,21 @@ st.markdown(
 }}
 
 /* Optional: AI headings controlled */
-[data-testid="stChatMessage"][aria-label="AI"] h1 {{
-  font-size: 1.25rem !important;
-  font-weight: 850 !important;
-  margin: 0.3rem 0 0.35rem 0 !important;
-}}
-[data-testid="stChatMessage"][aria-label="AI"] h2 {{
-  font-size: 1.08rem !important;
-  font-weight: 820 !important;
-  margin: 0.65rem 0 0.25rem 0 !important;
-}}
-[data-testid="stChatMessage"][aria-label="AI"] h3 {{
-  font-size: 1.00rem !important;
-  font-weight: 780 !important;
-  margin: 0.55rem 0 0.2rem 0 !important;
-}}
+/* Force ALL AI content to the same small size */
+[data-testid="stChatMessage"][aria-label="AI"] * {
+  font-size: 0.98rem !important;
+  line-height: 1.6 !important;
+  font-weight: 400 !important;
+}
+
+/* Optional: keep headings from looking like headings at all */
+[data-testid="stChatMessage"][aria-label="AI"] h1,
+[data-testid="stChatMessage"][aria-label="AI"] h2,
+[data-testid="stChatMessage"][aria-label="AI"] h3,
+[data-testid="stChatMessage"][aria-label="AI"] h4 {
+  margin: 0.35rem 0 0.2rem 0 !important;
+  font-weight: 800 !important;  /* still slightly bolder, but same size */
+}
 
 /* Keep text colors consistent */
 [data-testid="stChatMessage"] * {{
@@ -844,3 +844,4 @@ with row_r:
             st.session_state.messages.pop()
             st.session_state.regenerate = True
             st.rerun()
+
