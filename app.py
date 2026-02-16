@@ -5,8 +5,8 @@ import fitz  # PyMuPDF
 import faiss
 import numpy as np
 import json
-
 from typing import Optional
+
 from huggingface_hub import InferenceClient, HfApi
 from sentence_transformers import SentenceTransformer
 
@@ -203,6 +203,8 @@ if st.session_state.ui_dark_mode:
     user_bg = "rgba(30, 34, 46, 0.92)"
     ai_bg = "rgba(153, 0, 0, 0.22)"
     input_bg = "rgba(12, 14, 22, 0.85)"
+    card_bg = "rgba(255,255,255,0.04)"
+    card_border = "rgba(255,255,255,0.08)"
 else:
     bg = "#fafafa"
     panel = "rgba(255,255,255,0.92)"
@@ -213,6 +215,8 @@ else:
     user_bg = "rgba(248,250,252,0.98)"
     ai_bg = "rgba(153, 0, 0, 0.10)"
     input_bg = "rgba(255,255,255,0.98)"
+    card_bg = "rgba(11,18,32,0.03)"
+    card_border = "rgba(11,18,32,0.08)"
 
 st.markdown(
     f"""
@@ -243,6 +247,7 @@ st.markdown(
   font-size: 1.02rem;
   color: {mut};
 }}
+
 .stChatMessage {{
   padding: 1.05rem 1.10rem;
   border-radius: 22px;
@@ -269,6 +274,7 @@ st.markdown(
 [data-testid="stChatMessage"] a {{
   color: {accent2} !important;
 }}
+
 .stChatInput {{
   border-top: 1px solid {border};
   background: transparent;
@@ -286,13 +292,61 @@ st.markdown(
 .stChatInput textarea::placeholder {{
   color: {mut} !important;
 }}
-/* Softer buttons */
 .stButton button {{
   border-radius: 14px !important;
 }}
-/* Cleaner dividers */
 hr {{
   opacity: 0.25;
+}}
+
+/* Suggestion grid */
+.sugg-head {{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-top: 0.75rem;
+  margin-bottom: 0.5rem;
+}}
+.sugg-title {{
+  font-weight: 900;
+  font-size: 1.15rem;
+}}
+.sugg-sub {{
+  color: {mut};
+  font-size: 0.95rem;
+  margin-top: -2px;
+}}
+.sugg-grid {{
+  display:grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}}
+@media (max-width: 900px) {{
+  .sugg-grid {{ grid-template-columns: 1fr; }}
+}}
+.sugg-card {{
+  background: {card_bg};
+  border: 1px solid {card_border};
+  border-radius: 18px;
+  padding: 14px 14px;
+  min-height: 92px;
+}}
+.sugg-card-title {{
+  font-weight: 850;
+  font-size: 1.02rem;
+  margin-bottom: 6px;
+}}
+.sugg-card-desc {{
+  opacity: 0.80;
+  font-size: 0.93rem;
+  line-height: 1.35;
+}}
+/* Make the card button blend in */
+div[data-testid="stButton"] > button {{
+  border: 1px solid {card_border} !important;
+  background: {card_bg} !important;
+  font-weight: 800 !important;
+  padding: 0.60rem 0.75rem !important;
 }}
 </style>
 """,
@@ -308,16 +362,17 @@ if "messages" not in st.session_state:
     st.session_state.model_config = {
         "temperature": 0.2,
         "top_p": 0.9,
-        "max_tokens": 912,        # kept internally; removed from UI
-        "repeat_penalty": 1.1,    # kept internally
+        "max_tokens": 912,        # internal; no UI for tokens
+        "repeat_penalty": 1.1,    # internal
     }
     st.session_state.show_thinking = True
     st.session_state.show_reasoning = True
 
-if "mode" not in st.session_state:
-    st.session_state.mode = "Marketing"
+# Show suggestions ONLY once per fresh session until the user interacts (click OR types)
+if "show_suggestions" not in st.session_state:
+    st.session_state.show_suggestions = True
 
-# Load saved settings (keeps existing behavior; max_tokens stays internal)
+# Load saved settings
 if os.path.exists("settings.json"):
     with open("settings.json", "r") as f:
         saved_settings = json.load(f)
@@ -330,7 +385,7 @@ if os.path.exists("settings.json"):
             "max_tokens", st.session_state.model_config["max_tokens"]
         )
 
-# Initialize vector store with cached PDF loading
+# Initialize vector store
 if "vector_index" not in st.session_state:
     pdf_folder = "./pdfs"
     if os.path.exists(pdf_folder):
@@ -345,26 +400,31 @@ if "vector_index" not in st.session_state:
         st.session_state.metadatas = None
 
 ###########################################
-# Sidebar (Gen Z subtle, no tokens, no navigation section)
+# Sidebar (USC quick links back + minimal controls)
 ###########################################
 
 with st.sidebar:
-    st.markdown("### ⚡ Controls")
-    st.caption("Pick a mode. Tap a card. Get a strategy + citations.")
-
-    st.session_state.mode = st.selectbox(
-        "Mode",
-        ["Marketing", "Sales", "Business Development", "Product Strategy"],
-        index=["Marketing", "Sales", "Business Development", "Product Strategy"].index(st.session_state.mode)
-        if st.session_state.mode in ["Marketing", "Sales", "Business Development", "Product Strategy"] else 0
+    st.markdown(
+        """
+        <div class="sidebar-card" style="background: rgba(15,18,28,0.10); border: 1px solid rgba(11,18,32,0.10); border-radius: 18px; padding: 14px;">
+          <div style="font-weight:900; font-size: 1.05rem;">USC Links</div>
+          <div style="margin-top: 6px; opacity: 0.75; font-size: 0.95rem;">Open official pages in a new tab.</div>
+          <div style="margin-top: 10px;">
+            <a href="https://www.usc.edu" target="_blank">USC — University of Southern California</a><br/>
+            <a href="https://gould.usc.edu/faculty/profile/d-daniel-sokol/" target="_blank">Professor D. Sokol</a><br/>
+            <a href="https://www.marshall.usc.edu" target="_blank">USC Marshall School of Business</a><br/>
+            <a href="https://www.marshall.usc.edu/departments/marketing" target="_blank">Marshall Marketing Department</a>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
     st.divider()
 
+    st.markdown("### Controls")
     st.toggle("Thinking animation", key="show_thinking")
     st.toggle("Show reasoning", key="show_reasoning")
-
-    st.divider()
 
     with st.expander("Advanced", expanded=False):
         st.session_state.model_config["temperature"] = st.slider(
@@ -449,17 +509,9 @@ def sanitize_messages(msgs):
             cleaned.append({"role": role, "content": str(content)})
     return cleaned
 
-def build_system_prompt(retrieved_context: str, mode: str) -> str:
-    mode_focus = {
-        "Marketing": "positioning, segmentation, brand strategy, channels, pricing, experiments, messaging",
-        "Sales": "discovery, qualification (BANT/MEDDICC), objection handling, pitch, ROI framing, closing",
-        "Business Development": "partners, alliances, deal structures, integrations, co-marketing, distribution",
-        "Product Strategy": "JTBD, differentiation, roadmap, growth loops, activation, retention"
-    }.get(mode, "marketing strategy")
-
+def build_system_prompt(retrieved_context: str) -> str:
     return f"""
-You are a {mode} analyst for MKT 333 (Beer • AI • Video Games).
-Focus areas: {mode_focus}
+You are a course assistant for MKT 333 (Beer • AI • Video Games).
 
 Rules:
 - Use ONLY the retrieved context as the factual source. If the context doesn’t support a claim, say: "I don’t have enough information in the documents."
@@ -474,7 +526,7 @@ Response format (always):
 1) Executive takeaway (1–2 sentences)
 2) Evidence (bullets with citations)
 3) Strategy / Recommendation (what to do next)
-4) Script (pitch/email/talking points appropriate to the selected mode)
+4) Script (pitch/email/talking points)
 5) Metrics to track (3–6)
 6) Risks & assumptions
 """.strip()
@@ -496,7 +548,7 @@ def generate_response():
             st.session_state.metadatas,
         )
 
-    system_prompt = build_system_prompt(retrieved_context, st.session_state.mode)
+    system_prompt = build_system_prompt(retrieved_context)
 
     with st.chat_message("assistant", avatar=ai_avatar):
         response_placeholder = st.empty()
@@ -533,7 +585,7 @@ def generate_response():
         except Exception:
             assistant_text = "I’m having trouble reaching the model right now. Please try again in a moment."
 
-        # Simulated streaming (UI)
+        # Simulated streaming
         full_response = ""
         for token in assistant_text.split():
             full_response += token + " "
@@ -552,51 +604,14 @@ def generate_response():
         display_response(parsed, response_placeholder)
 
 ###########################################
-# Quick Cards (Recent / Frequent / Recommended)
+# One-time Suggestions (Recommended only)
 ###########################################
 
-if "recent_prompts" not in st.session_state:
-    st.session_state.recent_prompts = []  # newest first
-
-if "prompt_counts" not in st.session_state:
-    st.session_state.prompt_counts = {}  # prompt -> count
-
-def _track_prompt(prompt: str):
-    p = prompt.strip()
-    if not p:
-        return
-    st.session_state.recent_prompts = [x for x in st.session_state.recent_prompts if x != p]
-    st.session_state.recent_prompts.insert(0, p)
-    st.session_state.recent_prompts = st.session_state.recent_prompts[:6]
-    st.session_state.prompt_counts[p] = st.session_state.prompt_counts.get(p, 0) + 1
-
-def _run_prompt(prompt: str):
-    _track_prompt(prompt)
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    generate_response()
-
-def get_recent_cards():
-    return st.session_state.recent_prompts[:6]
-
-def get_frequent_cards():
-    items = sorted(st.session_state.prompt_counts.items(), key=lambda x: x[1], reverse=True)
-    return [p for p, c in items[:6]]
-
-RECOMMENDED = [
+SUGGESTIONS = [
     {
         "title": "Marketing Basics: STP",
         "desc": "Segmentation → Targeting → Positioning with citations.",
         "prompt": "Using the PDFs, explain STP (segmentation, targeting, positioning) and apply it to Beer/AI/Video Games. Include [Source: ...] citations."
-    },
-    {
-        "title": "Positioning & Differentiation",
-        "desc": "Sharp positioning + defensible moat.",
-        "prompt": "Using the PDFs, write a positioning statement, 3 differentiators, and a competitor counter-positioning plan. Include [Source: ...] citations."
-    },
-    {
-        "title": "Segmentation & ICP",
-        "desc": "Find best-fit customers + what to say.",
-        "prompt": "Using the PDFs, define 3 customer segments + ICP, each segment’s pain points, and tailored messaging. Include [Source: ...] citations."
     },
     {
         "title": "GTM Plan (30 days)",
@@ -604,111 +619,42 @@ RECOMMENDED = [
         "prompt": "Create a 30-day go-to-market plan based on the PDFs: channels, weekly experiments, messaging, KPIs, and risks. Include [Source: ...] citations."
     },
     {
-        "title": "Pricing & Monetization",
-        "desc": "Models + how to test pricing.",
-        "prompt": "Using the PDFs, propose 3 pricing models, when each wins, and a pricing experiment plan (hypothesis, test design, metrics). Include [Source: ...] citations."
-    },
-    {
-        "title": "Sales Pitch & Objections",
-        "desc": "Pitch + discovery + objections.",
-        "prompt": "Create a 30-second pitch, 2-minute pitch, 10 discovery questions, and 6 objections with responses using the PDFs. Include [Source: ...] citations."
-    },
-    {
         "title": "BD Partnerships",
         "desc": "Targets + deal structures.",
         "prompt": "Suggest 8 partnership targets and propose 3 deal structures (rev share/license/co-sell). Add a partner outreach email. Use PDFs + citations."
+    },
+    {
+        "title": "Positioning & Differentiation",
+        "desc": "Sharp positioning + defensible moat.",
+        "prompt": "Using the PDFs, write a positioning statement, 3 differentiators, and a competitor counter-positioning plan. Include [Source: ...] citations."
+    },
+    {
+        "title": "Pricing & Monetization",
+        "desc": "Models + how to test pricing.",
+        "prompt": "Using the PDFs, propose 3 pricing models, when each wins, and a pricing experiment plan (hypothesis, test design, metrics). Include [Source: ...] citations."
     },
     {
         "title": "Advanced: Growth Experiments",
         "desc": "Hypothesis-driven growth loops.",
         "prompt": "Using the PDFs, propose 6 growth experiments (hypothesis, channel, steps, success metric, risk). Include [Source: ...] citations."
     },
+    {
+        "title": "Segmentation & ICP",
+        "desc": "Find best-fit customers + what to say.",
+        "prompt": "Using the PDFs, define 3 customer segments + ICP, each segment’s pain points, and tailored messaging. Include [Source: ...] citations."
+    },
+    {
+        "title": "Sales Pitch & Objections",
+        "desc": "Pitch + discovery + objections.",
+        "prompt": "Create a 30-second pitch, 2-minute pitch, 10 discovery questions, and 6 objections with responses using the PDFs. Include [Source: ...] citations."
+    },
 ]
 
-st.markdown(
-    """
-    <style>
-    .qgrid { display:grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; }
-    @media (max-width: 900px) { .qgrid { grid-template-columns: 1fr; } }
-    .qcard {
-      border: 1px solid rgba(255,255,255,0.08);
-      background: rgba(255,255,255,0.04);
-      border-radius: 18px;
-      padding: 14px 14px;
-      min-height: 92px;
-      margin-bottom: 0.35rem;
-    }
-    .qcard-top { display:flex; gap:0.5rem; align-items:center; margin-bottom: 0.35rem; }
-    .qcard-ico { font-size: 1.1rem; opacity: 0.9; }
-    .qcard-title { font-weight: 850; font-size: 1.02rem; }
-    .qcard-desc { opacity: 0.75; font-size: 0.93rem; line-height: 1.35; }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-def _render_card(title: str, desc: str, prompt: str, icon: str, key: str):
-    st.markdown(
-        f"""
-        <div class="qcard">
-          <div class="qcard-top">
-            <span class="qcard-ico">{icon}</span>
-            <span class="qcard-title">{title}</span>
-          </div>
-          <div class="qcard-desc">{desc}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    if st.button("Open", key=key, use_container_width=True):
-        _run_prompt(prompt)
-
-tab_recent, tab_freq, tab_rec = st.tabs(["🕒 Recent", "🔥 Frequent", "⭐ Recommended"])
-
-with tab_recent:
-    recents = get_recent_cards()
-    if not recents:
-        st.caption("No recent prompts yet — tap a Recommended card ⭐")
-    else:
-        cols = st.columns(3)
-        for idx, p in enumerate(recents):
-            with cols[idx % 3]:
-                _render_card(
-                    title="Recent prompt",
-                    desc=(p[:90] + "…") if len(p) > 90 else p,
-                    prompt=p,
-                    icon="🕒",
-                    key=f"recent_{idx}"
-                )
-
-with tab_freq:
-    freq = get_frequent_cards()
-    if not freq:
-        st.caption("Frequent prompts show up after a few clicks.")
-    else:
-        cols = st.columns(3)
-        for idx, p in enumerate(freq):
-            with cols[idx % 3]:
-                _render_card(
-                    title="Frequently used",
-                    desc=(p[:90] + "…") if len(p) > 90 else p,
-                    prompt=p,
-                    icon="🔥",
-                    key=f"freq_{idx}"
-                )
-
-with tab_rec:
-    st.caption("Basics → Advanced marketing themes. Tap to generate a guided answer.")
-    cols = st.columns(3)
-    for idx, item in enumerate(RECOMMENDED):
-        with cols[idx % 3]:
-            _render_card(
-                title=item["title"],
-                desc=item["desc"],
-                prompt=item["prompt"],
-                icon="⭐",
-                key=f"rec_{idx}"
-            )
+def run_suggestion(prompt: str):
+    # Hide suggestions after first interaction (click)
+    st.session_state.show_suggestions = False
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    generate_response()
 
 ###########################################
 # Chat History Display
@@ -724,6 +670,39 @@ for message in st.session_state.messages:
         else:
             st.markdown(content)
 
+# Show suggestions ONCE (after greeting), then disappear forever once user interacts
+if st.session_state.show_suggestions and len(st.session_state.messages) <= 1:
+    st.markdown(
+        """
+        <div class="sugg-head">
+          <div>
+            <div class="sugg-title">Recommended</div>
+            <div class="sugg-sub">Tap one to get a guided, cited answer.</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    cols = st.columns(3)
+    for idx, item in enumerate(SUGGESTIONS):
+        with cols[idx % 3]:
+            st.markdown(
+                f"""
+                <div class="sugg-card">
+                  <div class="sugg-card-title">{item["title"]}</div>
+                  <div class="sugg-card-desc">{item["desc"]}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            if st.button("Open", key=f"sugg_{idx}", use_container_width=True):
+                run_suggestion(item["prompt"])
+
+###########################################
+# Regenerate flow (kept)
+###########################################
+
 if hasattr(st.session_state, "regenerate") and st.session_state.regenerate:
     if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
         generate_response()
@@ -734,6 +713,9 @@ if hasattr(st.session_state, "regenerate") and st.session_state.regenerate:
 ###########################################
 
 if prompt := st.chat_input("Type your message..."):
+    # Hide suggestions after first interaction (typing)
+    st.session_state.show_suggestions = False
+
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user", avatar=user_avatar):
         st.markdown(prompt)
