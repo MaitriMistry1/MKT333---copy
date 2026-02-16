@@ -420,26 +420,6 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-    st.divider()
-
-    st.markdown("### Controls")
-    st.toggle("Thinking animation", key="show_thinking")
-    st.toggle("Show reasoning", key="show_reasoning")
-
-    with st.expander("Advanced", expanded=False):
-        st.session_state.model_config["temperature"] = st.slider(
-            "Creativity",
-            0.0, 1.0,
-            st.session_state.model_config["temperature"],
-            0.1
-        )
-        st.session_state.model_config["top_p"] = st.slider(
-            "Diversity",
-            0.1, 1.0,
-            st.session_state.model_config.get("top_p", 0.9),
-            0.05
-        )
-
         def save_settings():
             settings = {
                 "show_thinking": st.session_state.show_thinking,
@@ -732,3 +712,4 @@ with row_r:
             st.session_state.messages.pop()
             st.session_state.regenerate = True
             st.rerun()
+
