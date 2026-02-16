@@ -179,7 +179,7 @@ def build_vector_store(docs):
 def retrieve_context(query, index, chunks, metadatas, top_k=5):
     """Retrieve relevant context from the vector store, including [Source: filename] labels."""
     query_embedding = model.encode([query], convert_to_numpy=True)
-    distances, indices = index.search(query_embedding, top_k)
+    _distances, indices = index.search(query_embedding, top_k)
 
     retrieved_blocks = []
     for i in indices[0]:
@@ -243,6 +243,7 @@ else:
     sb_badge_border = "rgba(255,204,0,0.18)"
     sb_badge_text = "rgba(11,18,32,0.85)"
 
+# ✅ IMPORTANT: keep braces doubled inside f-string CSS
 st.markdown(
     f"""
 <style>
@@ -311,26 +312,25 @@ st.markdown(
   max-width: 96% !important;
 }}
 
-/* Force ALL AI content to the SAME small size */
-[data-testid="stChatMessage"][aria-label="AI"] [data-testid="stChatMessageContent"] * {
+/* ✅ Force ALL AI content to the SAME small size */
+[data-testid="stChatMessage"][aria-label="AI"] [data-testid="stChatMessageContent"] * {{
   font-size: 0.98rem !important;
   line-height: 1.6 !important;
   font-weight: 400 !important;
-}
+}}
 
-/* Headings often have stronger default CSS — hard override them too */
+/* ✅ Headings override (THIS was your bug: braces must be doubled) */
 [data-testid="stChatMessage"][aria-label="AI"] [data-testid="stChatMessageContent"] h1,
 [data-testid="stChatMessage"][aria-label="AI"] [data-testid="stChatMessageContent"] h2,
 [data-testid="stChatMessage"][aria-label="AI"] [data-testid="stChatMessageContent"] h3,
 [data-testid="stChatMessage"][aria-label="AI"] [data-testid="stChatMessageContent"] h4,
 [data-testid="stChatMessage"][aria-label="AI"] [data-testid="stChatMessageContent"] h5,
-[data-testid="stChatMessage"][aria-label="AI"] [data-testid="stChatMessageContent"] h6 {
+[data-testid="stChatMessage"][aria-label="AI"] [data-testid="stChatMessageContent"] h6 {{
   font-size: 0.98rem !important;
   line-height: 1.6 !important;
   font-weight: 800 !important;
   margin: 0.35rem 0 0.2rem 0 !important;
-}
-
+}}
 
 /* Consistent text colors */
 [data-testid="stChatMessage"] * {{
@@ -833,4 +833,3 @@ with row_r:
             st.session_state.messages.pop()
             st.session_state.regenerate = True
             st.rerun()
-
