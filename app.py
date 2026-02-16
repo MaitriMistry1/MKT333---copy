@@ -193,30 +193,40 @@ with left:
         unsafe_allow_html=True,
     )
 
+# Theme vars
 if st.session_state.ui_dark_mode:
     bg = "#0b0d12"
-    panel = "rgba(15, 18, 28, 0.86)"
     text = "#e7eaf0"
     mut = "#a7b0c0"
     border = "rgba(231,234,240,0.12)"
     accent2 = "#ffcc00"
     user_bg = "rgba(30, 34, 46, 0.92)"
-    ai_bg = "rgba(153, 0, 0, 0.22)"
     input_bg = "rgba(12, 14, 22, 0.85)"
-    card_bg = "rgba(255,255,255,0.04)"
-    card_border = "rgba(255,255,255,0.08)"
+
+    # Sidebar cards like your screenshot
+    sb_card = "rgba(15, 18, 28, 0.86)"
+    sb_border = "rgba(231,234,240,0.12)"
+    sb_btn_bg = "rgba(12, 14, 22, 0.75)"
+    sb_btn_border = "rgba(231,234,240,0.10)"
+    sb_badge_bg = "rgba(255,204,0,0.12)"
+    sb_badge_border = "rgba(255,204,0,0.22)"
+    sb_badge_text = "rgba(231,234,240,1)"
 else:
     bg = "#fafafa"
-    panel = "rgba(255,255,255,0.92)"
     text = "#0b1220"
     mut = "#4b5563"
     border = "rgba(11,18,32,0.10)"
     accent2 = "#b38600"
     user_bg = "rgba(248,250,252,0.98)"
-    ai_bg = "rgba(153, 0, 0, 0.10)"
     input_bg = "rgba(255,255,255,0.98)"
-    card_bg = "rgba(11,18,32,0.03)"
-    card_border = "rgba(11,18,32,0.08)"
+
+    sb_card = "rgba(255,255,255,0.92)"
+    sb_border = "rgba(11,18,32,0.10)"
+    sb_btn_bg = "rgba(11,18,32,0.03)"
+    sb_btn_border = "rgba(11,18,32,0.10)"
+    sb_badge_bg = "rgba(179,134,0,0.10)"
+    sb_badge_border = "rgba(179,134,0,0.18)"
+    sb_badge_text = "rgba(11,18,32,0.85)"
 
 st.markdown(
     f"""
@@ -230,11 +240,11 @@ st.markdown(
   max-width: 980px;
 }}
 .top-banner {{
-  background: {panel};
   border: 1px solid {border};
   border-radius: 18px;
   padding: 18px 18px;
   text-align: center;
+  background: rgba(255,255,255,0.00);
 }}
 .hero-title {{
   margin-top: 8px;
@@ -248,22 +258,33 @@ st.markdown(
   color: {mut};
 }}
 
+/* ===== Chat: remove "white box" look ===== */
+/* Make message containers transparent by default */
 .stChatMessage {{
-  padding: 1.05rem 1.10rem;
-  border-radius: 22px;
-  margin: 0.80rem 0;
-  max-width: 88%;
-  border: 1px solid {border};
-  background: {panel};
+  background: transparent !important;
+  border: none !important;
+  padding: 0.35rem 0 !important;
+  margin: 0.65rem 0 !important;
+  max-width: 100% !important;
 }}
+/* User bubble stays bubble */
 [data-testid="stChatMessage"][aria-label="user"] {{
-  background: {user_bg};
-  margin-left: auto;
+  background: {user_bg} !important;
+  border: 1px solid {border} !important;
+  border-radius: 18px !important;
+  padding: 1.00rem 1.05rem !important;
+  margin-left: auto !important;
+  max-width: 88% !important;
 }}
+/* AI answer: no box, just clean text */
 [data-testid="stChatMessage"][aria-label="AI"] {{
-  background: {ai_bg};
-  margin-right: auto;
+  background: transparent !important;
+  border: none !important;
+  padding: 0.1rem 0 !important;
+  margin-right: auto !important;
+  max-width: 96% !important;
 }}
+/* Keep text colors consistent */
 [data-testid="stChatMessage"] * {{
   color: {text} !important;
 }}
@@ -275,6 +296,7 @@ st.markdown(
   color: {accent2} !important;
 }}
 
+/* Chat input */
 .stChatInput {{
   border-top: 1px solid {border};
   background: transparent;
@@ -292,6 +314,8 @@ st.markdown(
 .stChatInput textarea::placeholder {{
   color: {mut} !important;
 }}
+
+/* Softer buttons */
 .stButton button {{
   border-radius: 14px !important;
 }}
@@ -299,13 +323,13 @@ hr {{
   opacity: 0.25;
 }}
 
-/* Suggestion grid */
+/* ===== Suggestions (your template vibe) ===== */
 .sugg-head {{
   display:flex;
-  align-items:center;
+  align-items:flex-end;
   justify-content:space-between;
-  margin-top: 0.75rem;
-  margin-bottom: 0.5rem;
+  margin-top: 0.8rem;
+  margin-bottom: 0.55rem;
 }}
 .sugg-title {{
   font-weight: 900;
@@ -314,7 +338,7 @@ hr {{
 .sugg-sub {{
   color: {mut};
   font-size: 0.95rem;
-  margin-top: -2px;
+  margin-top: 2px;
 }}
 .sugg-grid {{
   display:grid;
@@ -325,8 +349,8 @@ hr {{
   .sugg-grid {{ grid-template-columns: 1fr; }}
 }}
 .sugg-card {{
-  background: {card_bg};
-  border: 1px solid {card_border};
+  background: rgba(255,255,255,0.02);
+  border: 1px solid {border};
   border-radius: 18px;
   padding: 14px 14px;
   min-height: 92px;
@@ -341,12 +365,49 @@ hr {{
   font-size: 0.93rem;
   line-height: 1.35;
 }}
-/* Make the card button blend in */
-div[data-testid="stButton"] > button {{
-  border: 1px solid {card_border} !important;
-  background: {card_bg} !important;
-  font-weight: 800 !important;
-  padding: 0.60rem 0.75rem !important;
+
+/* ===== Sidebar quick links (like screenshot 2) ===== */
+.sidebar-card {{
+  background: {sb_card};
+  border: 1px solid {sb_border};
+  border-radius: 18px;
+  padding: 16px;
+}}
+.sidebar-title {{
+  font-weight: 900;
+  font-size: 1.05rem;
+  margin: 0;
+}}
+.sidebar-sub {{
+  margin-top: 8px;
+  color: {mut};
+  font-size: 0.95rem;
+}}
+.sidebar-badge {{
+  display: inline-block;
+  margin-left: 10px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: {sb_badge_bg};
+  border: 1px solid {sb_badge_border};
+  color: {sb_badge_text};
+  font-size: 0.78rem;
+  font-weight: 800;
+}}
+.sidebar-links a {{
+  display: block;
+  text-decoration: none;
+  margin-top: 12px;
+  padding: 16px 14px;
+  border-radius: 14px;
+  border: 1px solid {sb_btn_border};
+  background: {sb_btn_bg};
+  color: {text} !important;
+  font-weight: 800;
+}}
+.sidebar-links a:hover {{
+  border-color: rgba(255,204,0,0.35);
+  box-shadow: 0 0 0 2px rgba(255,204,0,0.08);
 }}
 </style>
 """,
@@ -362,7 +423,7 @@ if "messages" not in st.session_state:
     st.session_state.model_config = {
         "temperature": 0.2,
         "top_p": 0.9,
-        "max_tokens": 912,        # internal; no UI for tokens
+        "max_tokens": 912,        # internal
         "repeat_penalty": 1.1,    # internal
     }
     st.session_state.show_thinking = True
@@ -406,31 +467,53 @@ if "vector_index" not in st.session_state:
 with st.sidebar:
     st.markdown(
         """
-        <div class="sidebar-card" style="background: rgba(15,18,28,0.10); border: 1px solid rgba(11,18,32,0.10); border-radius: 18px; padding: 14px;">
-          <div style="font-weight:900; font-size: 1.05rem;">USC Links</div>
-          <div style="margin-top: 6px; opacity: 0.75; font-size: 0.95rem;">Open official pages in a new tab.</div>
-          <div style="margin-top: 10px;">
-            <a href="https://www.usc.edu" target="_blank">USC — University of Southern California</a><br/>
-            <a href="https://gould.usc.edu/faculty/profile/d-daniel-sokol/" target="_blank">Professor D. Sokol</a><br/>
-            <a href="https://www.marshall.usc.edu" target="_blank">USC Marshall School of Business</a><br/>
+        <div class="sidebar-card">
+          <div class="sidebar-title">USC Links <span class="sidebar-badge">Quick</span></div>
+          <div class="sidebar-sub">Open official pages in a new tab.</div>
+
+          <div class="sidebar-links">
+            <a href="https://www.usc.edu" target="_blank">USC — University of Southern California</a>
+            <a href="https://gould.usc.edu/faculty/profile/d-daniel-sokol/" target="_blank">Professor D. Sokol</a>
+            <a href="https://www.marshall.usc.edu" target="_blank">USC Marshall School of Business</a>
             <a href="https://www.marshall.usc.edu/departments/marketing" target="_blank">Marshall Marketing Department</a>
           </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    def save_settings():
+
+    st.divider()
+
+    st.markdown("### Controls")
+    st.toggle("Thinking animation", key="show_thinking")
+    st.toggle("Show reasoning", key="show_reasoning")
+
+    with st.expander("Advanced", expanded=False):
+        st.session_state.model_config["temperature"] = st.slider(
+            "Creativity",
+            0.0, 1.0,
+            st.session_state.model_config["temperature"],
+            0.1
+        )
+        st.session_state.model_config["top_p"] = st.slider(
+            "Diversity",
+            0.1, 1.0,
+            st.session_state.model_config.get("top_p", 0.9),
+            0.05
+        )
+
+        def save_settings():
             settings = {
                 "show_thinking": st.session_state.show_thinking,
                 "show_reasoning": st.session_state.show_reasoning,
                 "temperature": st.session_state.model_config["temperature"],
-                "max_tokens": st.session_state.model_config["max_tokens"],  # internal
+                "max_tokens": st.session_state.model_config["max_tokens"],
             }
             with open("settings.json", "w") as f:
                 json.dump(settings, f)
             st.success("Saved ✨")
 
-    if st.button("Save", use_container_width=True):
+        if st.button("Save", use_container_width=True):
             save_settings()
 
     # Keep your existing experimental PDF recalculation behavior
@@ -489,25 +572,42 @@ def sanitize_messages(msgs):
     return cleaned
 
 def build_system_prompt(retrieved_context: str) -> str:
+    # More structured outputs (heading / subheadings / bullets)
     return f"""
 You are a course assistant for MKT 333 (Beer • AI • Video Games).
 
-Rules:
+Hard rules:
 - Use ONLY the retrieved context as the factual source. If the context doesn’t support a claim, say: "I don’t have enough information in the documents."
 - Cite evidence using the labels in the context, like: [Source: filename.pdf]
-- Be concrete, actionable, and business-oriented (plans, scripts, metrics).
-- If the user asks for a plan, provide steps + metrics + risks + assumptions.
+- Do NOT invent citations.
+- Write in clean Markdown.
+
+Output structure (use this exact skeleton; depth can vary):
+# <Short Title>
+
+## 1) Executive takeaway
+- 2–4 bullets max.
+
+## 2) Key points
+### What it means
+- bullets
+
+### Why it matters (business lens)
+- bullets
+
+## 3) How to apply
+- Step-by-step bullets or short numbered steps.
+
+## 4) Quick examples (if helpful)
+- bullets
+
+## 5) Evidence from the PDFs
+- Bullet each claim + citation like: [Source: ...]
+
+If the user asks a simple definition, keep sections short but still use headings.
 
 Retrieved context:
 {retrieved_context}
-
-Response format (always):
-1) Executive takeaway (1–2 sentences)
-2) Evidence (bullets with citations)
-3) Strategy / Recommendation (what to do next)
-4) Script (pitch/email/talking points)
-5) Metrics to track (3–6)
-6) Risks & assumptions
 """.strip()
 
 def generate_response():
@@ -630,7 +730,6 @@ SUGGESTIONS = [
 ]
 
 def run_suggestion(prompt: str):
-    # Hide suggestions after first interaction (click)
     st.session_state.show_suggestions = False
     st.session_state.messages.append({"role": "user", "content": prompt})
     generate_response()
@@ -649,7 +748,7 @@ for message in st.session_state.messages:
         else:
             st.markdown(content)
 
-# Show suggestions ONCE (after greeting), then disappear forever once user interacts
+# Suggestions: show once (after greeting), disappear forever after first click OR typing
 if st.session_state.show_suggestions and len(st.session_state.messages) <= 1:
     st.markdown(
         """
@@ -692,7 +791,6 @@ if hasattr(st.session_state, "regenerate") and st.session_state.regenerate:
 ###########################################
 
 if prompt := st.chat_input("Type your message..."):
-    # Hide suggestions after first interaction (typing)
     st.session_state.show_suggestions = False
 
     st.session_state.messages.append({"role": "user", "content": prompt})
@@ -711,8 +809,3 @@ with row_r:
             st.session_state.messages.pop()
             st.session_state.regenerate = True
             st.rerun()
-
-
-
-
-
