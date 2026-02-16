@@ -199,11 +199,11 @@ if st.session_state.ui_dark_mode:
     text = "#e7eaf0"
     mut = "#a7b0c0"
     border = "rgba(231,234,240,0.12)"
-    accent2 = "#ffcc00"
+    accent2 = "#FFCC00"  # USC Gold
+    accent1 = "#990000"  # USC Cardinal
     user_bg = "rgba(30, 34, 46, 0.92)"
     input_bg = "rgba(12, 14, 22, 0.85)"
 
-    # Sidebar cards like your screenshot
     sb_card = "rgba(15, 18, 28, 0.86)"
     sb_border = "rgba(231,234,240,0.12)"
     sb_btn_bg = "rgba(12, 14, 22, 0.75)"
@@ -216,7 +216,8 @@ else:
     text = "#0b1220"
     mut = "#4b5563"
     border = "rgba(11,18,32,0.10)"
-    accent2 = "#b38600"
+    accent2 = "#FFCC00"  # USC Gold
+    accent1 = "#990000"  # USC Cardinal
     user_bg = "rgba(248,250,252,0.98)"
     input_bg = "rgba(255,255,255,0.98)"
 
@@ -224,13 +225,21 @@ else:
     sb_border = "rgba(11,18,32,0.10)"
     sb_btn_bg = "rgba(11,18,32,0.03)"
     sb_btn_border = "rgba(11,18,32,0.10)"
-    sb_badge_bg = "rgba(179,134,0,0.10)"
-    sb_badge_border = "rgba(179,134,0,0.18)"
+    sb_badge_bg = "rgba(255,204,0,0.10)"
+    sb_badge_border = "rgba(255,204,0,0.18)"
     sb_badge_text = "rgba(11,18,32,0.85)"
 
 st.markdown(
     f"""
 <style>
+:root {{
+  --border: {border};
+  --user-bg: {user_bg};
+  --usc-cardinal: {accent1};
+  --usc-gold: {accent2};
+}}
+
+/* Base */
 .stApp {{
   background: {bg};
   color: {text};
@@ -239,6 +248,8 @@ st.markdown(
   padding-top: 1.0rem;
   max-width: 980px;
 }}
+
+/* Banner */
 .top-banner {{
   border: 1px solid {border};
   border-radius: 18px;
@@ -259,7 +270,7 @@ st.markdown(
 }}
 
 /* ===== Chat: remove "white box" look ===== */
-/* Make message containers transparent by default */
+/* Make containers transparent by default */
 .stChatMessage {{
   background: transparent !important;
   border: none !important;
@@ -267,6 +278,7 @@ st.markdown(
   margin: 0.65rem 0 !important;
   max-width: 100% !important;
 }}
+
 /* User bubble stays bubble */
 [data-testid="stChatMessage"][aria-label="user"] {{
   background: {user_bg} !important;
@@ -276,19 +288,41 @@ st.markdown(
   margin-left: auto !important;
   max-width: 88% !important;
 }}
-/* AI answer: no box, just clean text */
-[data-testid="stChatMessage"][aria-label="AI"] p,
-[data-testid="stChatMessage"][aria-label="AI"] li {
-    font-size: 0.98rem !important;
-    line-height: 1.6 !important;
-    font-weight: 400 !important;
-}
+
+/* AI message container: transparent */
+[data-testid="stChatMessage"][aria-label="AI"] {{
   background: transparent !important;
   border: none !important;
-  padding: 0.1rem 0 !important;
+  padding: 0.10rem 0 !important;
   margin-right: auto !important;
   max-width: 96% !important;
 }}
+
+/* AI text sizing (smaller, clean) */
+[data-testid="stChatMessage"][aria-label="AI"] p,
+[data-testid="stChatMessage"][aria-label="AI"] li {{
+  font-size: 0.98rem !important;
+  line-height: 1.6 !important;
+  font-weight: 400 !important;
+}}
+
+/* Optional: AI headings controlled */
+[data-testid="stChatMessage"][aria-label="AI"] h1 {{
+  font-size: 1.25rem !important;
+  font-weight: 850 !important;
+  margin: 0.3rem 0 0.35rem 0 !important;
+}}
+[data-testid="stChatMessage"][aria-label="AI"] h2 {{
+  font-size: 1.08rem !important;
+  font-weight: 820 !important;
+  margin: 0.65rem 0 0.25rem 0 !important;
+}}
+[data-testid="stChatMessage"][aria-label="AI"] h3 {{
+  font-size: 1.00rem !important;
+  font-weight: 780 !important;
+  margin: 0.55rem 0 0.2rem 0 !important;
+}}
+
 /* Keep text colors consistent */
 [data-testid="stChatMessage"] * {{
   color: {text} !important;
@@ -311,7 +345,7 @@ st.markdown(
   color: {text} !important;
   border-radius: 16px !important;
   border: 1px solid {border} !important;
-  font-size: 1.08rem !important;
+  font-size: 1.05rem !important;
   line-height: 1.45 !important;
   min-height: 72px !important;
   padding: 14px 16px !important;
@@ -324,11 +358,8 @@ st.markdown(
 .stButton button {{
   border-radius: 14px !important;
 }}
-hr {{
-  opacity: 0.25;
-}}
 
-/* ===== Suggestions (your template vibe) ===== */
+/* ===== Suggestions (template vibe) ===== */
 .sugg-head {{
   display:flex;
   align-items:flex-end;
@@ -577,7 +608,6 @@ def sanitize_messages(msgs):
     return cleaned
 
 def build_system_prompt(retrieved_context: str) -> str:
-    # More structured outputs (heading / subheadings / bullets)
     return f"""
 You are a course assistant for MKT 333 (Beer • AI • Video Games).
 
@@ -814,5 +844,3 @@ with row_r:
             st.session_state.messages.pop()
             st.session_state.regenerate = True
             st.rerun()
-
-
