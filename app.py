@@ -419,7 +419,7 @@ with st.sidebar:
         """,
         unsafe_allow_html=True,
     )
-     st.divider()
+    st.divider()
 
     st.markdown("### Controls")
     st.toggle("Thinking animation", key="show_thinking")
@@ -731,4 +731,5 @@ with row_r:
             st.session_state.messages.pop()
             st.session_state.regenerate = True
             st.rerun()
+
 
