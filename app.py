@@ -228,7 +228,8 @@ else:
     sb_badge_border = "rgba(179,134,0,0.18)"
     sb_badge_text = "rgba(11,18,32,0.85)"
 
-st.markdown("""
+st.markdown(
+    f"""
 <style>
 .stApp {{
   background: {bg};
@@ -259,38 +260,30 @@ st.markdown("""
 
 /* ===== Chat: remove "white box" look ===== */
 /* Make message containers transparent by default */
-[data-testid="stChatMessage"][aria-label="AI"]{
+.stChatMessage {{
   background: transparent !important;
   border: none !important;
-  padding: 0.1rem 0 !important;
-  margin-right: auto !important;
-  max-width: 96% !important;
-}
+  padding: 0.35rem 0 !important;
+  margin: 0.65rem 0 !important;
+  max-width: 100% !important;
+}}
 /* User bubble stays bubble */
-[data-testid="stChatMessage"][aria-label="user"]{
-  background: var(--user-bg) !important;
-  border: 1px solid var(--border) !important;
+[data-testid="stChatMessage"][aria-label="user"] {{
+  background: {user_bg} !important;
+  border: 1px solid {border} !important;
   border-radius: 18px !important;
   padding: 1.00rem 1.05rem !important;
   margin-left: auto !important;
   max-width: 88% !important;
-}
+}}
 /* AI answer: no box, just clean text */
-[data-testid="stChatMessage"][aria-label="AI"]{
+[data-testid="stChatMessage"][aria-label="AI"] {{
   background: transparent !important;
   border: none !important;
   padding: 0.1rem 0 !important;
   margin-right: auto !important;
   max-width: 96% !important;
-}
-.hello-bubble{
-  display: inline-block;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  padding: 1.00rem 1.05rem;
-  max-width: 88%;
-}
+}}
 /* Keep text colors consistent */
 [data-testid="stChatMessage"] * {{
   color: {text} !important;
@@ -417,7 +410,9 @@ hr {{
   box-shadow: 0 0 0 2px rgba(255,204,0,0.08);
 }}
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 ###########################################
 # Session State Initialization
@@ -743,21 +738,15 @@ def run_suggestion(prompt: str):
 # Chat History Display
 ###########################################
 
-for i, message in enumerate(st.session_state.messages):
+for message in st.session_state.messages:
     role = "user" if message["role"] == "user" else "AI"
     with st.chat_message(role, avatar=user_avatar if role == "user" else ai_avatar):
         reasoning = message.get("reasoning", "")
         content = message.get("content", "")
-
-        # Only the FIRST assistant message gets the hello bubble
-        if role == "AI" and i == 0:
-            content = f"<div class='hello-bubble'>{content}</div>"
-
         if st.session_state.show_reasoning and reasoning:
             st.markdown(f"<div class='reasoning'>🤔 {reasoning}</div>{content}", unsafe_allow_html=True)
         else:
-            st.markdown(content, unsafe_allow_html=True)
-
+            st.markdown(content)
 
 # Suggestions: show once (after greeting), disappear forever after first click OR typing
 if st.session_state.show_suggestions and len(st.session_state.messages) <= 1:
@@ -785,7 +774,7 @@ if st.session_state.show_suggestions and len(st.session_state.messages) <= 1:
                 """,
                 unsafe_allow_html=True,
             )
-            if st.button("Continue in chat", key=f"sugg_{idx}", use_container_width=True):
+            if st.button("Open", key=f"sugg_{idx}", use_container_width=True):
                 run_suggestion(item["prompt"])
 
 ###########################################
@@ -820,7 +809,3 @@ with row_r:
             st.session_state.messages.pop()
             st.session_state.regenerate = True
             st.rerun()
-
-
-
-
