@@ -248,7 +248,7 @@ st.markdown(
 }}
 .hero-title {{
   margin-top: 8px;
-  font-size: 1.08rem;
+  font-size: 1.70rem;
   font-weight: 900;
   letter-spacing: 0.2px;
 }}
@@ -277,7 +277,12 @@ st.markdown(
   max-width: 88% !important;
 }}
 /* AI answer: no box, just clean text */
-[data-testid="stChatMessage"][aria-label="AI"] {{
+[data-testid="stChatMessage"][aria-label="AI"] p,
+[data-testid="stChatMessage"][aria-label="AI"] li {
+    font-size: 0.98rem !important;
+    line-height: 1.6 !important;
+    font-weight: 400 !important;
+}
   background: transparent !important;
   border: none !important;
   padding: 0.1rem 0 !important;
@@ -809,4 +814,5 @@ with row_r:
             st.session_state.messages.pop()
             st.session_state.regenerate = True
             st.rerun()
+
 
