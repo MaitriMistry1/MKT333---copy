@@ -248,6 +248,8 @@ st.markdown(
   color: {mut};
 }}
 
+/* ===== CHAT: REMOVE WHITE BOX BEHIND ASSISTANT ===== */
+/* Keep your general bubble styling */
 .stChatMessage {{
   padding: 1.05rem 1.10rem;
   border-radius: 22px;
@@ -260,10 +262,72 @@ st.markdown(
   background: {user_bg};
   margin-left: auto;
 }}
+/* Assistant container: transparent + no border/shadow */
 [data-testid="stChatMessage"][aria-label="AI"] {{
-  background: {ai_bg};
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
   margin-right: auto;
 }}
+
+/* This inner wrapper is usually the real "white box" */
+[data-testid="stChatMessage"][aria-label="AI"] [data-testid="stChatMessageContent"] {{
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}}
+/* Some Streamlit versions add another wrapper */
+[data-testid="stChatMessage"][aria-label="AI"] [data-testid="stChatMessageContent"] > div {{
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}}
+/* Avoid any markdown panel look */
+[data-testid="stChatMessage"][aria-label="AI"] .stMarkdown {{
+  background: transparent !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}}
+
+/* ===== Make LLM answers more "layout-y": spacing, bullets, bold ===== */
+[data-testid="stChatMessage"][aria-label="AI"] p {{
+  margin: 0.35rem 0 0.55rem 0 !important;
+  line-height: 1.65 !important;
+}}
+[data-testid="stChatMessage"][aria-label="AI"] ul,
+[data-testid="stChatMessage"][aria-label="AI"] ol {{
+  margin: 0.25rem 0 0.7rem 1.1rem !important;
+  padding: 0 !important;
+}}
+[data-testid="stChatMessage"][aria-label="AI"] li {{
+  margin: 0.22rem 0 !important;
+  line-height: 1.6 !important;
+}}
+[data-testid="stChatMessage"][aria-label="AI"] strong {{
+  font-weight: 800 !important;
+}}
+/* Make headings readable but not gigantic */
+[data-testid="stChatMessage"][aria-label="AI"] h1 {{
+  font-size: 1.20rem !important;
+  margin: 0.25rem 0 0.55rem 0 !important;
+}}
+[data-testid="stChatMessage"][aria-label="AI"] h2 {{
+  font-size: 1.08rem !important;
+  margin: 0.65rem 0 0.35rem 0 !important;
+}}
+[data-testid="stChatMessage"][aria-label="AI"] h3 {{
+  font-size: 1.00rem !important;
+  margin: 0.55rem 0 0.25rem 0 !important;
+}}
+[data-testid="stChatMessage"][aria-label="AI"] hr {{
+  margin: 0.8rem 0 !important;
+  opacity: 0.25;
+}}
+
 [data-testid="stChatMessage"] * {{
   color: {text} !important;
 }}
@@ -341,7 +405,6 @@ hr {{
   font-size: 0.93rem;
   line-height: 1.35;
 }}
-/* Make the card button blend in */
 div[data-testid="stButton"] > button {{
   border: 1px solid {card_border} !important;
   background: {card_bg} !important;
@@ -509,26 +572,40 @@ def sanitize_messages(msgs):
             cleaned.append({"role": role, "content": str(content)})
     return cleaned
 
+# ✅ UPDATED: stronger "layout" prompting (spacing, bullets, bold, short sections)
 def build_system_prompt(retrieved_context: str) -> str:
     return f"""
 You are a course assistant for MKT 333 (Beer • AI • Video Games).
 
 Rules:
-- Use ONLY the retrieved context as the factual source. If the context doesn’t support a claim, say: "I don’t have enough information in the documents."
-- Cite evidence using the labels in the context, like: [Source: filename.pdf]
-- Be concrete, actionable, and business-oriented (plans, scripts, metrics).
-- If the user asks for a plan, provide steps + metrics + risks + assumptions.
+- Use ONLY the retrieved context as the factual source.
+- If the context doesn’t support a claim, say: "I don’t have enough information in the documents."
+- Cite evidence using the labels exactly like: [Source: filename.pdf]
+- Do NOT invent citations.
+- Write in clean Markdown.
+- Make the answer visually easy to scan: short paragraphs, blank lines between sections, bullets, and bold key phrases.
+
+Required layout (always follow):
+# <Short Title>
+
+**Executive takeaway:** 1–2 sentences.
+
+## Key points
+- **Point 1:** ...
+- **Point 2:** ...
+- **Point 3:** ...
+
+## What to do next
+1. **Step 1:** ...
+2. **Step 2:** ...
+3. **Step 3:** ...
+
+## Evidence (from PDFs)
+- Claim + citation. [Source: ...]
+- Claim + citation. [Source: ...]
 
 Retrieved context:
 {retrieved_context}
-
-Response format (always):
-1) Executive takeaway (1–2 sentences)
-2) Evidence (bullets with citations)
-3) Strategy / Recommendation (what to do next)
-4) Script (pitch/email/talking points)
-5) Metrics to track (3–6)
-6) Risks & assumptions
 """.strip()
 
 def generate_response():
