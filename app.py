@@ -1,4 +1,3 @@
-# app.py (cleaned + fixed)
 import streamlit as st
 import re
 import os
@@ -18,7 +17,6 @@ SYLLABUS_CANDIDATE_PATHS = [
     r"D:\Maitri\USC\Grader\knowledge_base\MKT 333 - Innovation Economics and Business - Beer AI and Video Games - Syllabus - 12-26-2025.pdf"
 ]
 
-
 def load_syllabus_bytes():
     for p in SYLLABUS_CANDIDATE_PATHS:
         try:
@@ -28,7 +26,6 @@ def load_syllabus_bytes():
         except Exception:
             continue
     return None, None
-
 
 # -----------------------------
 # Page config (UI)
@@ -53,9 +50,7 @@ def get_hf_token() -> Optional[str]:
     tok = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACEHUB_API_TOKEN")
     return tok.strip() if tok else None
 
-
 HF_TOKEN = get_hf_token()
-
 
 def hf_token_ok(token: str) -> bool:
     try:
@@ -63,7 +58,6 @@ def hf_token_ok(token: str) -> bool:
         return True
     except Exception:
         return False
-
 
 if not HF_TOKEN or not hf_token_ok(HF_TOKEN):
     st.error("Hugging Face token missing or invalid.")
@@ -78,7 +72,6 @@ hf_client = InferenceClient(
 # PDF Extraction and RAG Functions with Caching
 ###########################################
 
-
 def extract_text_from_pdf(pdf_path):
     text = ""
     with fitz.open(pdf_path) as doc:
@@ -88,7 +81,6 @@ def extract_text_from_pdf(pdf_path):
             cleaned_text = re.sub(r"Page \d+", "", cleaned_text)
             text += cleaned_text + "\n"
     return text.strip()
-
 
 def load_all_pdfs(folder_path):
     """Load all PDFs using cached JSON if available and up-to-date."""
@@ -138,7 +130,6 @@ def load_all_pdfs(folder_path):
 
     return [{"filename": doc["filename"], "text": doc["text"]} for doc in docs]
 
-
 def split_text(text, max_length=5000):
     sentences = text.split("\n")
     chunks = []
@@ -153,14 +144,11 @@ def split_text(text, max_length=5000):
         chunks.append(current_chunk.strip())
     return chunks
 
-
 @st.cache_resource
 def get_embedder():
     return SentenceTransformer("BAAI/bge-small-en-v1.5")
 
-
 model = get_embedder()
-
 
 def build_vector_store(docs):
     all_chunks = []
@@ -175,18 +163,16 @@ def build_vector_store(docs):
     index.add(embeddings)
     return index, all_chunks, metadata
 
-
 def retrieve_context(query, index, chunks, metadatas, top_k=5):
     """Retrieve relevant context from the vector store, including [Source: filename] labels."""
     query_embedding = model.encode([query], convert_to_numpy=True)
-    _distances, indices = index.search(query_embedding, top_k)
+    distances, indices = index.search(query_embedding, top_k)
 
     retrieved_blocks = []
     for i in indices[0]:
         fname = metadatas[i].get("filename", "unknown") if metadatas else "unknown"
         retrieved_blocks.append(f"[Source: {fname}]\n{chunks[i]}")
     return "\n\n---\n\n".join(retrieved_blocks)
-
 
 ###########################################
 # UI Theme + Styling
@@ -195,7 +181,7 @@ def retrieve_context(query, index, chunks, metadatas, top_k=5):
 if "ui_dark_mode" not in st.session_state:
     st.session_state.ui_dark_mode = False
 
-left, _right = st.columns([0.97, 0.20], vertical_alignment="center")
+left, right = st.columns([0.97, 0.20], vertical_alignment="center")
 with left:
     st.markdown(
         """
@@ -207,54 +193,34 @@ with left:
         unsafe_allow_html=True,
     )
 
-# Theme vars
 if st.session_state.ui_dark_mode:
     bg = "#0b0d12"
+    panel = "rgba(15, 18, 28, 0.86)"
     text = "#e7eaf0"
     mut = "#a7b0c0"
     border = "rgba(231,234,240,0.12)"
-    accent2 = "#FFCC00"  # USC Gold
-    accent1 = "#990000"  # USC Cardinal
+    accent2 = "#ffcc00"
     user_bg = "rgba(30, 34, 46, 0.92)"
+    ai_bg = "rgba(153, 0, 0, 0.22)"
     input_bg = "rgba(12, 14, 22, 0.85)"
-
-    sb_card = "rgba(15, 18, 28, 0.86)"
-    sb_border = "rgba(231,234,240,0.12)"
-    sb_btn_bg = "rgba(12, 14, 22, 0.75)"
-    sb_btn_border = "rgba(231,234,240,0.10)"
-    sb_badge_bg = "rgba(255,204,0,0.12)"
-    sb_badge_border = "rgba(255,204,0,0.22)"
-    sb_badge_text = "rgba(231,234,240,1)"
+    card_bg = "rgba(255,255,255,0.04)"
+    card_border = "rgba(255,255,255,0.08)"
 else:
     bg = "#fafafa"
+    panel = "rgba(255,255,255,0.92)"
     text = "#0b1220"
     mut = "#4b5563"
     border = "rgba(11,18,32,0.10)"
-    accent2 = "#FFCC00"  # USC Gold
-    accent1 = "#990000"  # USC Cardinal
+    accent2 = "#b38600"
     user_bg = "rgba(248,250,252,0.98)"
+    ai_bg = "rgba(153, 0, 0, 0.10)"
     input_bg = "rgba(255,255,255,0.98)"
+    card_bg = "rgba(11,18,32,0.03)"
+    card_border = "rgba(11,18,32,0.08)"
 
-    sb_card = "rgba(255,255,255,0.92)"
-    sb_border = "rgba(11,18,32,0.10)"
-    sb_btn_bg = "rgba(11,18,32,0.03)"
-    sb_btn_border = "rgba(11,18,32,0.10)"
-    sb_badge_bg = "rgba(255,204,0,0.10)"
-    sb_badge_border = "rgba(255,204,0,0.18)"
-    sb_badge_text = "rgba(11,18,32,0.85)"
-
-# ✅ IMPORTANT: keep braces doubled inside f-string CSS
 st.markdown(
     f"""
 <style>
-:root {{
-  --border: {border};
-  --user-bg: {user_bg};
-  --usc-cardinal: {accent1};
-  --usc-gold: {accent2};
-}}
-
-/* Base */
 .stApp {{
   background: {bg};
   color: {text};
@@ -263,14 +229,12 @@ st.markdown(
   padding-top: 1.0rem;
   max-width: 980px;
 }}
-
-/* Banner */
 .top-banner {{
+  background: {panel};
   border: 1px solid {border};
   border-radius: 18px;
   padding: 18px 18px;
   text-align: center;
-  background: rgba(255,255,255,0.00);
 }}
 .hero-title {{
   margin-top: 8px;
@@ -284,55 +248,22 @@ st.markdown(
   color: {mut};
 }}
 
-/* ===== Chat: remove "white box" look ===== */
 .stChatMessage {{
-  background: transparent !important;
-  border: none !important;
-  padding: 0.35rem 0 !important;
-  margin: 0.65rem 0 !important;
-  max-width: 100% !important;
+  padding: 1.05rem 1.10rem;
+  border-radius: 22px;
+  margin: 0.80rem 0;
+  max-width: 88%;
+  border: 1px solid {border};
+  background: {panel};
 }}
-
-/* User bubble */
 [data-testid="stChatMessage"][aria-label="user"] {{
-  background: {user_bg} !important;
-  border: 1px solid {border} !important;
-  border-radius: 18px !important;
-  padding: 1.00rem 1.05rem !important;
-  margin-left: auto !important;
-  max-width: 88% !important;
+  background: {user_bg};
+  margin-left: auto;
 }}
-
-/* AI container transparent */
 [data-testid="stChatMessage"][aria-label="AI"] {{
-  background: transparent !important;
-  border: none !important;
-  padding: 0.10rem 0 !important;
-  margin-right: auto !important;
-  max-width: 96% !important;
+  background: {ai_bg};
+  margin-right: auto;
 }}
-
-/* ✅ Force ALL AI content to the SAME small size */
-[data-testid="stChatMessage"][aria-label="AI"] [data-testid="stChatMessageContent"] * {{
-  font-size: 0.98rem !important;
-  line-height: 1.6 !important;
-  font-weight: 400 !important;
-}}
-
-/* ✅ Headings override (THIS was your bug: braces must be doubled) */
-[data-testid="stChatMessage"][aria-label="AI"] [data-testid="stChatMessageContent"] h1,
-[data-testid="stChatMessage"][aria-label="AI"] [data-testid="stChatMessageContent"] h2,
-[data-testid="stChatMessage"][aria-label="AI"] [data-testid="stChatMessageContent"] h3,
-[data-testid="stChatMessage"][aria-label="AI"] [data-testid="stChatMessageContent"] h4,
-[data-testid="stChatMessage"][aria-label="AI"] [data-testid="stChatMessageContent"] h5,
-[data-testid="stChatMessage"][aria-label="AI"] [data-testid="stChatMessageContent"] h6 {{
-  font-size: 0.98rem !important;
-  line-height: 1.6 !important;
-  font-weight: 800 !important;
-  margin: 0.35rem 0 0.2rem 0 !important;
-}}
-
-/* Consistent text colors */
 [data-testid="stChatMessage"] * {{
   color: {text} !important;
 }}
@@ -344,7 +275,6 @@ st.markdown(
   color: {accent2} !important;
 }}
 
-/* Chat input */
 .stChatInput {{
   border-top: 1px solid {border};
   background: transparent;
@@ -354,7 +284,7 @@ st.markdown(
   color: {text} !important;
   border-radius: 16px !important;
   border: 1px solid {border} !important;
-  font-size: 1.05rem !important;
+  font-size: 1.08rem !important;
   line-height: 1.45 !important;
   min-height: 72px !important;
   padding: 14px 16px !important;
@@ -362,19 +292,20 @@ st.markdown(
 .stChatInput textarea::placeholder {{
   color: {mut} !important;
 }}
-
-/* Buttons */
 .stButton button {{
   border-radius: 14px !important;
 }}
+hr {{
+  opacity: 0.25;
+}}
 
-/* ===== Suggestions ===== */
+/* Suggestion grid */
 .sugg-head {{
   display:flex;
-  align-items:flex-end;
+  align-items:center;
   justify-content:space-between;
-  margin-top: 0.8rem;
-  margin-bottom: 0.55rem;
+  margin-top: 0.75rem;
+  margin-bottom: 0.5rem;
 }}
 .sugg-title {{
   font-weight: 900;
@@ -383,11 +314,19 @@ st.markdown(
 .sugg-sub {{
   color: {mut};
   font-size: 0.95rem;
-  margin-top: 2px;
+  margin-top: -2px;
+}}
+.sugg-grid {{
+  display:grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}}
+@media (max-width: 900px) {{
+  .sugg-grid {{ grid-template-columns: 1fr; }}
 }}
 .sugg-card {{
-  background: rgba(255,255,255,0.02);
-  border: 1px solid {border};
+  background: {card_bg};
+  border: 1px solid {card_border};
   border-radius: 18px;
   padding: 14px 14px;
   min-height: 92px;
@@ -402,49 +341,12 @@ st.markdown(
   font-size: 0.93rem;
   line-height: 1.35;
 }}
-
-/* ===== Sidebar quick links ===== */
-.sidebar-card {{
-  background: {sb_card};
-  border: 1px solid {sb_border};
-  border-radius: 18px;
-  padding: 16px;
-}}
-.sidebar-title {{
-  font-weight: 900;
-  font-size: 1.05rem;
-  margin: 0;
-}}
-.sidebar-sub {{
-  margin-top: 8px;
-  color: {mut};
-  font-size: 0.95rem;
-}}
-.sidebar-badge {{
-  display: inline-block;
-  margin-left: 10px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: {sb_badge_bg};
-  border: 1px solid {sb_badge_border};
-  color: {sb_badge_text};
-  font-size: 0.78rem;
-  font-weight: 800;
-}}
-.sidebar-links a {{
-  display: block;
-  text-decoration: none;
-  margin-top: 12px;
-  padding: 16px 14px;
-  border-radius: 14px;
-  border: 1px solid {sb_btn_border};
-  background: {sb_btn_bg};
-  color: {text} !important;
-  font-weight: 800;
-}}
-.sidebar-links a:hover {{
-  border-color: rgba(255,204,0,0.35);
-  box-shadow: 0 0 0 2px rgba(255,204,0,0.08);
+/* Make the card button blend in */
+div[data-testid="stButton"] > button {{
+  border: 1px solid {card_border} !important;
+  background: {card_bg} !important;
+  font-weight: 800 !important;
+  padding: 0.60rem 0.75rem !important;
 }}
 </style>
 """,
@@ -460,13 +362,13 @@ if "messages" not in st.session_state:
     st.session_state.model_config = {
         "temperature": 0.2,
         "top_p": 0.9,
-        "max_tokens": 912,
-        "repeat_penalty": 1.1,
+        "max_tokens": 912,        # internal; no UI for tokens
+        "repeat_penalty": 1.1,    # internal
     }
     st.session_state.show_thinking = True
     st.session_state.show_reasoning = True
 
-# Show suggestions ONLY once per session until user interacts
+# Show suggestions ONLY once per fresh session until the user interacts (click OR types)
 if "show_suggestions" not in st.session_state:
     st.session_state.show_suggestions = True
 
@@ -498,20 +400,19 @@ if "vector_index" not in st.session_state:
         st.session_state.metadatas = None
 
 ###########################################
-# Sidebar (USC quick links + minimal controls)
+# Sidebar (USC quick links back + minimal controls)
 ###########################################
 
 with st.sidebar:
     st.markdown(
         """
-        <div class="sidebar-card">
-          <div class="sidebar-title">USC Links <span class="sidebar-badge">Quick</span></div>
-          <div class="sidebar-sub">Open official pages in a new tab.</div>
-
-          <div class="sidebar-links">
-            <a href="https://www.usc.edu" target="_blank">USC — University of Southern California</a>
-            <a href="https://gould.usc.edu/faculty/profile/d-daniel-sokol/" target="_blank">Professor D. Sokol</a>
-            <a href="https://www.marshall.usc.edu" target="_blank">USC Marshall School of Business</a>
+        <div class="sidebar-card" style="background: rgba(15,18,28,0.10); border: 1px solid rgba(11,18,32,0.10); border-radius: 18px; padding: 14px;">
+          <div style="font-weight:900; font-size: 1.05rem;">USC Links</div>
+          <div style="margin-top: 6px; opacity: 0.75; font-size: 0.95rem;">Open official pages in a new tab.</div>
+          <div style="margin-top: 10px;">
+            <a href="https://www.usc.edu" target="_blank">USC — University of Southern California</a><br/>
+            <a href="https://gould.usc.edu/faculty/profile/d-daniel-sokol/" target="_blank">Professor D. Sokol</a><br/>
+            <a href="https://www.marshall.usc.edu" target="_blank">USC Marshall School of Business</a><br/>
             <a href="https://www.marshall.usc.edu/departments/marketing" target="_blank">Marshall Marketing Department</a>
           </div>
         </div>
@@ -527,10 +428,16 @@ with st.sidebar:
 
     with st.expander("Advanced", expanded=False):
         st.session_state.model_config["temperature"] = st.slider(
-            "Creativity", 0.0, 1.0, st.session_state.model_config["temperature"], 0.1
+            "Creativity",
+            0.0, 1.0,
+            st.session_state.model_config["temperature"],
+            0.1
         )
         st.session_state.model_config["top_p"] = st.slider(
-            "Diversity", 0.1, 1.0, st.session_state.model_config.get("top_p", 0.9), 0.05
+            "Diversity",
+            0.1, 1.0,
+            st.session_state.model_config.get("top_p", 0.9),
+            0.05
         )
 
         def save_settings():
@@ -538,7 +445,7 @@ with st.sidebar:
                 "show_thinking": st.session_state.show_thinking,
                 "show_reasoning": st.session_state.show_reasoning,
                 "temperature": st.session_state.model_config["temperature"],
-                "max_tokens": st.session_state.model_config["max_tokens"],
+                "max_tokens": st.session_state.model_config["max_tokens"],  # internal
             }
             with open("settings.json", "w") as f:
                 json.dump(settings, f)
@@ -547,22 +454,20 @@ with st.sidebar:
         if st.button("Save", use_container_width=True):
             save_settings()
 
+    # Keep your existing experimental PDF recalculation behavior
     def recalculate_pdf_data():
         pdf_folder = "./knowledge_base"
-        if not os.path.exists(pdf_folder):
-            st.error("Folder './knowledge_base' not found.")
-            return
-
         pdf_files = [f for f in os.listdir(pdf_folder) if f.endswith(".pdf")]
+
         if not pdf_files:
-            st.error("No PDFs found in './knowledge_base'.")
+            st.sidebar.error("No PDFs found in 'pdfs' folder.")
             return
 
         pdf_data = {"files": pdf_files}
         with open("pdf_data.json", "w") as json_file:
             json.dump(pdf_data, json_file, indent=4)
 
-        st.success("PDF data recalculated!")
+        st.sidebar.success("PDF data recalculated!")
 
     st.markdown("### Docs")
     if st.button("♻️ Recalculate PDF Data", use_container_width=True):
@@ -577,22 +482,23 @@ ai_avatar = "🤖"
 # Chat Functions
 ###########################################
 
-def parse_response(response: str):
+def parse_response(response):
+    """Extract reasoning and content from response using <think> tags."""
     match = re.search(r"<think>(.*?)</think>(.*)", response, re.DOTALL)
     if match:
         return {"reasoning": match.group(1).strip(), "content": match.group(2).strip()}
     return {"reasoning": "", "content": response}
 
-
 def display_response(parsed, placeholder):
+    """Display response with optional reasoning."""
     final_display = []
     if st.session_state.show_reasoning and parsed["reasoning"]:
         final_display.append(f"<div class='reasoning'>🤔 {parsed['reasoning']}</div>")
     final_display.append(parsed["content"])
     placeholder.markdown("\n".join(final_display), unsafe_allow_html=True)
 
-
 def sanitize_messages(msgs):
+    """Remove extra keys (like reasoning) before sending to HF."""
     cleaned = []
     for m in msgs:
         if not isinstance(m, dict):
@@ -603,47 +509,30 @@ def sanitize_messages(msgs):
             cleaned.append({"role": role, "content": str(content)})
     return cleaned
 
-
 def build_system_prompt(retrieved_context: str) -> str:
     return f"""
 You are a course assistant for MKT 333 (Beer • AI • Video Games).
 
-Hard rules:
+Rules:
 - Use ONLY the retrieved context as the factual source. If the context doesn’t support a claim, say: "I don’t have enough information in the documents."
 - Cite evidence using the labels in the context, like: [Source: filename.pdf]
-- Do NOT invent citations.
-- Write in clean Markdown.
-
-Output structure (use this exact skeleton; depth can vary):
-# <Short Title>
-
-## 1) Executive takeaway
-- 2–4 bullets max.
-
-## 2) Key points
-### What it means
-- bullets
-
-### Why it matters (business lens)
-- bullets
-
-## 3) How to apply
-- Step-by-step bullets or short numbered steps.
-
-## 4) Quick examples (if helpful)
-- bullets
-
-## 5) Evidence from the PDFs
-- Bullet each claim + citation like: [Source: ...]
-
-If the user asks a simple definition, keep sections short but still use headings.
+- Be concrete, actionable, and business-oriented (plans, scripts, metrics).
+- If the user asks for a plan, provide steps + metrics + risks + assumptions.
 
 Retrieved context:
 {retrieved_context}
+
+Response format (always):
+1) Executive takeaway (1–2 sentences)
+2) Evidence (bullets with citations)
+3) Strategy / Recommendation (what to do next)
+4) Script (pitch/email/talking points)
+5) Metrics to track (3–6)
+6) Risks & assumptions
 """.strip()
 
-
 def generate_response():
+    """Generate and display AI response with RAG context."""
     user_prompt = st.session_state.messages[-1]["content"]
 
     retrieved_context = ""
@@ -680,16 +569,19 @@ def generate_response():
 
         try:
             response = hf_client.chat.completions.create(
-                messages=sanitize_messages(
-                    [{"role": "system", "content": system_prompt}, *st.session_state.messages[-6:]]
-                ),
+                messages=sanitize_messages([
+                    {"role": "system", "content": system_prompt},
+                    *st.session_state.messages[-6:],
+                ]),
                 max_tokens=st.session_state.model_config["max_tokens"],
                 temperature=st.session_state.model_config["temperature"],
                 top_p=st.session_state.model_config["top_p"],
             )
+
             assistant_text = response.choices[0].message.content or ""
             if not assistant_text.strip():
                 assistant_text = "I don’t have enough information in the documents to answer that question."
+
         except Exception:
             assistant_text = "I’m having trouble reaching the model right now. Please try again in a moment."
 
@@ -702,12 +594,17 @@ def generate_response():
 
         parsed = parse_response(full_response)
         st.session_state.messages.append(
-            {"role": "assistant", "content": parsed["content"], "reasoning": parsed["reasoning"]}
+            {
+                "role": "assistant",
+                "content": parsed["content"],
+                "reasoning": parsed["reasoning"],
+            }
         )
+
         display_response(parsed, response_placeholder)
 
 ###########################################
-# One-time Suggestions
+# One-time Suggestions (Recommended only)
 ###########################################
 
 SUGGESTIONS = [
@@ -753,8 +650,8 @@ SUGGESTIONS = [
     },
 ]
 
-
 def run_suggestion(prompt: str):
+    # Hide suggestions after first interaction (click)
     st.session_state.show_suggestions = False
     st.session_state.messages.append({"role": "user", "content": prompt})
     generate_response()
@@ -773,7 +670,7 @@ for message in st.session_state.messages:
         else:
             st.markdown(content)
 
-# Suggestions: show once (after greeting)
+# Show suggestions ONCE (after greeting), then disappear forever once user interacts
 if st.session_state.show_suggestions and len(st.session_state.messages) <= 1:
     st.markdown(
         """
@@ -816,7 +713,9 @@ if hasattr(st.session_state, "regenerate") and st.session_state.regenerate:
 ###########################################
 
 if prompt := st.chat_input("Type your message..."):
+    # Hide suggestions after first interaction (typing)
     st.session_state.show_suggestions = False
+
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user", avatar=user_avatar):
         st.markdown(prompt)
