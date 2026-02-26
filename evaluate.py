@@ -1,254 +1,347 @@
-import streamlit as st
-import ollama
 import os
+import re
+import json
+import time
+from io import StringIO
+from typing import List, Dict, Tuple, Optional
+
+import streamlit as st
 import fitz
 import faiss
 import numpy as np
-import json
+from huggingface_hub import InferenceClient, HfApi
 from sentence_transformers import SentenceTransformer
-import pandas as pd
-from io import StringIO
-import time
 
-model = SentenceTransformer('bge-small-en-v1.5')
 
-def extract_text_from_pdf(pdf_path):
-    text = ""
+# =============================
+# Config (match app.py)
+# =============================
+PDF_FOLDER = "./pdfs"
+CACHE_JSON_NAME = "pdf_data.json"
+EMBED_MODEL_NAME = "BAAI/bge-small-en-v1.5"
+HF_MODEL_NAME = "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
+
+
+# =============================
+# HF token
+# =============================
+def get_hf_token() -> Optional[str]:
+    try:
+        tok = st.secrets.get("HF_TOKEN", None)
+        if tok:
+            return str(tok).strip()
+    except Exception:
+        pass
+    tok = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACEHUB_API_TOKEN")
+    return tok.strip() if tok else None
+
+
+def hf_token_ok(token: str) -> bool:
+    try:
+        HfApi().whoami(token=token)
+        return True
+    except Exception:
+        return False
+
+
+# =============================
+# PDF + caching
+# =============================
+def extract_text_from_pdf(pdf_path: str) -> str:
+    parts = []
     with fitz.open(pdf_path) as doc:
         for page in doc:
-            text += page.get_text() + "\n"
-    return text
+            raw = page.get_text()
+            raw = re.sub(r"\n\s*\n+", "\n", raw)
+            raw = re.sub(r"Page\s+\d+\s*", "", raw, flags=re.IGNORECASE)
+            parts.append(raw.strip())
+    return "\n".join([p for p in parts if p]).strip()
 
-def load_all_pdfs(folder_path):
-    json_path = os.path.join(folder_path, "pdf_data.json")
-    current_files = [f for f in os.listdir(folder_path) if f.lower().endswith(".pdf")]
+
+def load_all_pdfs(folder_path: str) -> List[Dict[str, str]]:
+    if not os.path.exists(folder_path):
+        return []
+
+    pdf_files = sorted([f for f in os.listdir(folder_path) if f.lower().endswith(".pdf")])
+    if not pdf_files:
+        return []
+
+    json_path = os.path.join(folder_path, CACHE_JSON_NAME)
+
     if os.path.exists(json_path):
         try:
-            with open(json_path, "r") as f:
-                saved_data = json.load(f)
-            saved_files = {entry["filename"]: entry for entry in saved_data}
-            current_set = set(current_files)
-            saved_set = set(saved_files.keys())
-            needs_refresh = current_set != saved_set
-            if not needs_refresh:
-                for filename in current_files:
-                    file_path = os.path.join(folder_path, filename)
-                    if saved_files[filename]["last_modified"] < os.path.getmtime(file_path):
-                        needs_refresh = True
+            with open(json_path, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+            saved_map = {x["filename"]: x for x in saved}
+            if set(saved_map.keys()) == set(pdf_files):
+                ok = True
+                for fn in pdf_files:
+                    p = os.path.join(folder_path, fn)
+                    if saved_map[fn]["last_modified"] < os.path.getmtime(p):
+                        ok = False
                         break
-            if not needs_refresh:
-                return [{"filename": entry["filename"], "text": entry["text"]} for entry in saved_data]
-        except (json.JSONDecodeError, KeyError):
+                if ok:
+                    return [{"filename": x["filename"], "text": x["text"]} for x in saved]
+        except Exception:
             pass
-    docs = []
-    for filename in current_files:
-        path = os.path.join(folder_path, filename)
-        text = extract_text_from_pdf(path)
-        docs.append({"filename": filename, "text": text, "last_modified": os.path.getmtime(path)})
-    with open(json_path, "w") as f:
-        json.dump(docs, f)
-    return [{"filename": doc["filename"], "text": doc["text"]} for doc in docs]
 
-def split_text(text, max_length=5000):
-    sentences = text.split('\n')
+    docs = []
+    for fn in pdf_files:
+        p = os.path.join(folder_path, fn)
+        docs.append(
+            {
+                "filename": fn,
+                "text": extract_text_from_pdf(p),
+                "last_modified": os.path.getmtime(p),
+            }
+        )
+
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(docs, f)
+
+    return [{"filename": x["filename"], "text": x["text"]} for x in docs]
+
+
+# =============================
+# Chunking + cosine FAISS
+# =============================
+def chunk_text(text: str, chunk_size: int = 1200, overlap: int = 150) -> List[str]:
+    text = text.strip()
+    if not text:
+        return []
     chunks = []
-    current_chunk = ""
-    for sentence in sentences:
-        if len(current_chunk) + len(sentence) < max_length:
-            current_chunk += sentence + "\n"
-        else:
-            chunks.append(current_chunk.strip())
-            current_chunk = sentence + "\n"
-    if current_chunk:
-        chunks.append(current_chunk.strip())
+    start = 0
+    n = len(text)
+    while start < n:
+        end = min(start + chunk_size, n)
+        chunk = text[start:end].strip()
+        if chunk:
+            chunks.append(chunk)
+        start = end - overlap
+        if start < 0:
+            start = 0
+        if end == n:
+            break
     return chunks
 
-def build_vector_store(docs):
+
+@st.cache_resource
+def get_embedder() -> SentenceTransformer:
+    return SentenceTransformer(EMBED_MODEL_NAME)
+
+
+def _normalize(v: np.ndarray) -> np.ndarray:
+    return v / (np.linalg.norm(v, axis=1, keepdims=True) + 1e-12)
+
+
+def build_vector_store(docs: List[Dict[str, str]]) -> Tuple[faiss.Index, List[str], List[Dict[str, str]]]:
     all_chunks = []
-    metadata = []
-    for doc in docs:
-        chunks = split_text(doc["text"])
-        all_chunks.extend(chunks)
-        metadata.extend([{"filename": doc["filename"]}] * len(chunks))
-    embeddings = model.encode(all_chunks, convert_to_numpy=True)
-    dimension = embeddings.shape[1]
-    index = faiss.IndexFlatL2(dimension)
-    index.add(embeddings)
-    return index, all_chunks, metadata
+    metas = []
+    for d in docs:
+        cs = chunk_text(d["text"])
+        all_chunks.extend(cs)
+        metas.extend([{"filename": d["filename"]}] * len(cs))
 
-def retrieve_context(query, index, chunks, top_k=2):
-    query_embedding = model.encode([query], convert_to_numpy=True)
-    distances, indices = index.search(query_embedding, top_k)
-    retrieved = [chunks[i] for i in indices[0]]
-    return "\n\n".join(retrieved)
+    if not all_chunks:
+        index = faiss.IndexFlatIP(384)
+        return index, [], []
 
-# Evaluation functions
+    embedder = get_embedder()
+    embs = embedder.encode(all_chunks, convert_to_numpy=True, show_progress_bar=False)
+    embs = _normalize(embs).astype("float32")
+
+    index = faiss.IndexFlatIP(embs.shape[1])
+    index.add(embs)
+    return index, all_chunks, metas
+
+
+def retrieve_context(
+    query: str,
+    index: faiss.Index,
+    chunks: List[str],
+    metas: List[Dict[str, str]],
+    top_k: int = 6,
+    min_score: float = 0.25,
+) -> Tuple[str, List[Dict[str, str]]]:
+    if not chunks:
+        return "", []
+
+    embedder = get_embedder()
+    q = embedder.encode([query], convert_to_numpy=True, show_progress_bar=False)
+    q = _normalize(q).astype("float32")
+
+    scores, idxs = index.search(q, top_k)
+
+    blocks = []
+    hits = []
+    for score, i in zip(scores[0], idxs[0]):
+        if i < 0 or i >= len(chunks):
+            continue
+        if float(score) < min_score:
+            continue
+        fname = metas[i].get("filename", "unknown") if metas else "unknown"
+        blocks.append(f"[Source: {fname} | score={float(score):.2f}]\n{chunks[i]}")
+        hits.append({"filename": fname, "score": float(score)})
+
+    return "\n\n---\n\n".join(blocks).strip(), hits
+
+
+# =============================
+# LLM prompt (evaluation)
+# =============================
+def build_system_prompt(retrieved_context: str) -> str:
+    return f"""
+You are evaluating a RAG chatbot.
+
+Rules:
+- Answer ONLY using the retrieved context.
+- If the context does not contain the answer, say exactly:
+  "I don’t have enough information in the documents to answer that question."
+- Keep the answer concise and in bullet points when possible.
+- Cite evidence like: [Source: filename.pdf]
+
+Retrieved context:
+{retrieved_context}
+""".strip()
+
+
+# =============================
+# Test set (you can replace)
+# =============================
 TEST_SET = [
-    {
-        "query": "When was the School of Engineering and Physical Sciences founded?",
-        "expected": "The School of Engineering and Physical Sciences (SEPS) started its journey in 1993 as the School of Engineering and Applied Sciences (SEAS), later renamed SEPS in 2014."
-    },
-    {
-        "query": "How many students are currently enrolled in SEPS?",
-        "expected": "SEPS is currently home to over 7,500 undergraduate and graduate students."
-    },
-    {
-        "query": "Which departments are part of SEPS?",
-        "expected": "SEPS includes the Department of Architecture (DoA), the Department of Civil and Environmental Engineering (CEE), the Department of Electrical and Computer Engineering (ECE), and the Department of Mathematics and Physics (DMP)."
-    },
-    {
-        "query": "What undergraduate programs does the Department of Electrical and Computer Engineering offer?",
-        "expected": "The Department of Electrical and Computer Engineering (ECE) offers Bachelor of Science in Computer Science and Engineering (BS CSE), Bachelor of Science in Electrical and Electronic Engineering (BS EEE), and Bachelor of Science in Electronics and Telecommunication Engineering (BS ETE)."
-    },
-    {
-        "query": "What is the duration and credit hours for the Bachelor of Architecture program?",
-        "expected": "The Bachelor of Architecture (B. Arch) program requires 176 credits and takes 5 years."
-    },
-    {
-        "query": "How is NSU ranked for engineering according to Times Higher Education 2023?",
-        "expected": "NSU is ranked #1 in Bangladesh for engineering by the Times Higher Education World University Rankings 2023, with a global rank of 301-400."
-    },
-    {
-        "query": "What is the vision of SEPS?",
-        "expected": "The vision of SEPS is to be a center of excellence in innovation and technological entrepreneurship by building a knowledge and skill-based learning environment in engineering, architecture, and physical sciences with technical competency, social responsibility, communication skills, and ethical standards."
-    },
-    {
-        "query": "What is one of the missions of SEPS?",
-        "expected": "One mission of SEPS is to maintain international standards in program curricula, instruction style, laboratory and research facilities, faculty recruitment, and student intake."
-    },
-    {
-        "query": "How has undergraduate student intake changed over the past five years?",
-        "expected": "Over the past five years, the undergraduate student intake at SEPS has grown steadily from 1,100 to over 2,000."
-    },
-    {
-        "query": "What laboratory facilities does the Department of Civil and Environmental Engineering currently have?",
-        "expected": "The Department of Civil and Environmental Engineering (CEE) currently has 6 testing labs and 1 drawing lab."
-    },
-    {
-        "query": "What new labs are planned for the Department of Architecture by 2023?",
-        "expected": "The Department of Architecture plans to add 1 Design Lab, 1 3D Printing Lab, 1 Photography Lab, and 1 Simulation Lab by 2023."
-    },
-    {
-        "query": "Are the engineering programs at SEPS accredited?",
-        "expected": "Yes, all engineering programs under SEPS are accredited by the Board of Accreditation for Engineering and Technical Education (BAETE)."
-    }
+    # Replace with your MKT333 questions + expected answers
+    {"query": "Why did Carlsberg care so much about packaging?", "expected": "Packaging mattered because ... (from your PDFs)."},
 ]
 
-def evaluate_accuracy(test_set, vector_index, chunks, model_config):
-    if vector_index is None or chunks is None:
-        return [{"query": "N/A", "expected": "N/A", "response": "No PDFs loaded for evaluation",
-                 "similarity": 0.0, "is_correct": False}]
 
+# =============================
+# Evaluation
+# =============================
+def cosine_sim(a: np.ndarray, b: np.ndarray) -> float:
+    return float(np.dot(a, b) / ((np.linalg.norm(a) * np.linalg.norm(b)) + 1e-12))
+
+
+def evaluate(test_set, hf_client, index, chunks, metas, sim_threshold=0.82):
+    embedder = get_embedder()
     results = []
+
     for item in test_set:
-        query = item["query"]
+        q = item["query"]
         expected = item["expected"]
-        retrieved_context = retrieve_context(query, vector_index, chunks)
-        system_prompt = f"""
-        Use the following retrieved context to answer the query accurately:
-        {retrieved_context}
-        Try to always cite information from the documents. If unsure, say 'I don’t have enough information to answer this.'
-        """
-        messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": query}]
-        response = ollama.chat(
-            model="deepseek-r1:1.5b",
-            messages=messages,
-            options=model_config
-        )["message"]["content"]
-        emb_exp = model.encode(expected)
-        emb_res = model.encode(response)
-        similarity = np.dot(emb_exp, emb_res) / (np.linalg.norm(emb_exp) * np.linalg.norm(emb_res))
-        is_correct = similarity > 0.85
-        results.append({
-            "query": query,
-            "expected": expected,
-            "response": response,
-            "similarity": similarity,
-            "is_correct": is_correct
-        })
+
+        ctx, hits = retrieve_context(q, index, chunks, metas)
+
+        system_prompt = build_system_prompt(ctx)
+        messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": q}]
+
+        try:
+            resp = hf_client.chat.completions.create(
+                messages=messages,
+                max_tokens=600,
+                temperature=0.2,
+                top_p=0.9,
+            )
+            answer = resp.choices[0].message.content or ""
+        except Exception as e:
+            answer = f"[ERROR calling model] {e}"
+
+        # Similarity (rough metric)
+        emb_exp = embedder.encode([expected], convert_to_numpy=True)[0]
+        emb_ans = embedder.encode([answer], convert_to_numpy=True)[0]
+        sim = cosine_sim(emb_exp, emb_ans)
+
+        results.append(
+            {
+                "query": q,
+                "expected": expected,
+                "response": answer,
+                "similarity": sim,
+                "pass_similarity": sim >= sim_threshold,
+                "retrieval_hits": hits,
+                "ctx_chars": len(ctx),
+            }
+        )
+
     return results
 
-def generate_report(results):
-    report = StringIO()
-    report.write("=== NSU Campus AI Assistant Accuracy Report ===\n")
-    report.write(f"Date: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-    report.write(f"Total Queries Evaluated: {len(results)}\n")
-    correct_count = sum(1 for r in results if r["is_correct"])
-    accuracy = correct_count / len(results) * 100 if results else 0
-    report.write(f"Overall Accuracy: {accuracy:.2f}%\n\n")
-    report.write("Detailed Results:\n")
-    report.write("-" * 50 + "\n")
-    for i, result in enumerate(results, 1):
-        report.write(f"Query {i}: {result['query']}\n")
-        report.write(f"Expected: {result['expected']}\n")
-        report.write(f"Response: {result['response']}\n")
-        report.write(f"Similarity: {result['similarity']:.3f}\n")
-        report.write(f"Correct: {'Yes' if result['is_correct'] else 'No'}\n")
-        report.write("-" * 50 + "\n")
-    return report.getvalue()
 
-# Streamlit app setup
-st.set_page_config(initial_sidebar_state="collapsed")
+def generate_report(results: List[Dict]) -> str:
+    out = StringIO()
+    out.write("=== RAG Bot Evaluation Report ===\n")
+    out.write(f"Date: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+    out.write(f"Total Queries: {len(results)}\n")
 
-# Session state initialization with explicit vector store setup
-def initialize_vector_store():
-    pdf_folder = "./pdfs"
-    if os.path.exists(pdf_folder) and any(f.lower().endswith(".pdf") for f in os.listdir(pdf_folder)):
-        docs = load_all_pdfs(pdf_folder)
-        if docs:
-            vector_index, chunks, metadatas = build_vector_store(docs)
-            st.session_state.vector_index = vector_index
-            st.session_state.chunks = chunks
-            st.session_state.metadatas = metadatas
-        else:
-            st.session_state.vector_index = None
-            st.session_state.chunks = None
-            st.session_state.metadatas = None
-    else:
-        st.session_state.vector_index = None
-        st.session_state.chunks = None
-        st.session_state.metadatas = None
-        st.warning("No PDFs found in './pdfs' folder. Please add PDFs to enable functionality.")
+    pass_count = sum(1 for r in results if r["pass_similarity"])
+    out.write(f"Pass(similarity): {pass_count}/{len(results)}\n\n")
+
+    for i, r in enumerate(results, 1):
+        out.write(f"--- Query {i} ---\n")
+        out.write(f"Q: {r['query']}\n")
+        out.write(f"Expected: {r['expected']}\n")
+        out.write(f"Response: {r['response']}\n")
+        out.write(f"Similarity: {r['similarity']:.3f} | Pass: {r['pass_similarity']}\n")
+        out.write(f"Retrieved context chars: {r['ctx_chars']}\n")
+        out.write("Top retrieval hits:\n")
+        for h in r["retrieval_hits"][:5]:
+            out.write(f"  - {h['filename']} (score={h['score']:.2f})\n")
+        out.write("\n")
+
+    return out.getvalue()
+
+
+# =============================
+# Streamlit UI
+# =============================
+st.set_page_config(page_title="RAG Bot Evaluation", initial_sidebar_state="expanded")
+
+HF_TOKEN = get_hf_token()
+if not HF_TOKEN or not hf_token_ok(HF_TOKEN):
+    st.error("HF_TOKEN missing/invalid. Add it to secrets or env to run evaluation.")
+    st.stop()
+
+hf_client = InferenceClient(model=HF_MODEL_NAME, token=HF_TOKEN)
+
+st.title("RAG Bot Evaluation")
 
 if "vector_index" not in st.session_state:
-    initialize_vector_store()
+    docs = load_all_pdfs(PDF_FOLDER)
+    idx, ch, mt = build_vector_store(docs) if docs else (None, None, None)
+    st.session_state.vector_index = idx
+    st.session_state.chunks = ch
+    st.session_state.metadatas = mt
 
-if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hello! How can I assist you today? 🚀"}]
-    st.session_state.model_config = {"temperature": 0.4, "top_p": 0.9, "max_tokens": 912, "repeat_penalty": 1.1}
-
-# Sidebar with evaluation
 with st.sidebar:
     st.header("Controls")
     if st.button("♻️ Reload PDFs"):
-        with st.spinner("Reloading PDFs..."):
-            initialize_vector_store()
-            st.success("PDFs reloaded successfully!")
+        docs = load_all_pdfs(PDF_FOLDER)
+        idx, ch, mt = build_vector_store(docs) if docs else (None, None, None)
+        st.session_state.vector_index = idx
+        st.session_state.chunks = ch
+        st.session_state.metadatas = mt
+        st.success("Reloaded PDFs + rebuilt index.")
 
-    st.subheader("Evaluation")
-    if st.button("📊 Generate Accuracy Report"):
-        with st.spinner("Evaluating chatbot accuracy..."):
-            eval_results = evaluate_accuracy(
-                TEST_SET,
-                st.session_state.get("vector_index"),
-                st.session_state.get("chunks"),
-                st.session_state.model_config
-            )
-            report_text = generate_report(eval_results)
-            st.text_area("Accuracy Report", report_text, height=300)
+    sim_threshold = st.slider("Similarity threshold", 0.50, 0.95, 0.82, 0.01)
+
+    if st.button("📊 Run Evaluation"):
+        idx = st.session_state.vector_index
+        ch = st.session_state.chunks
+        mt = st.session_state.metadatas
+
+        if idx is None or ch is None or mt is None:
+            st.warning("No PDFs / index loaded. Put PDFs in ./pdfs first.")
+        else:
+            with st.spinner("Running evaluation..."):
+                results = evaluate(TEST_SET, hf_client, idx, ch, mt, sim_threshold=sim_threshold)
+                report = generate_report(results)
+
+            st.text_area("Report", report, height=350)
             st.download_button(
-                label="📥 Download Report",
-                data=report_text,
-                file_name=f"chatbot_accuracy_report_{time.strftime('%Y%m%d_%H%M%S')}.txt",
-                mime="text/plain"
+                "📥 Download Report",
+                data=report,
+                file_name=f"rag_eval_report_{time.strftime('%Y%m%d_%H%M%S')}.txt",
+                mime="text/plain",
             )
 
-st.title("NSU Campus AI Assistant")
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-if prompt := st.chat_input("Type your message..."):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
+st.info(
+    "Note: Similarity scoring is only a rough metric. For RAG bots, you’ll get better evaluation by checking citations and whether retrieved context contains the answer."
+)
